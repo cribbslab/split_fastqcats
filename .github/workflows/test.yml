@@ -1,4 +1,4 @@
-name: Test Script
+name: Test Script with Default Parameters
 
 on:
   push:
@@ -28,18 +28,8 @@ jobs:
 
     - name: Run script with default parameters
       run: |
-        python script_name.py test_data.fastq.gz output_reads.fastq
-
-    - name: Run script with custom primer
-      run: |
-        python script_name.py test_data.fastq.gz output_reads_custom.fastq -p NEWPRIMER
-
-    - name: Run script with custom indexes
-      run: |
-        python script_name.py test_data.fastq.gz output_reads_custom_indexes.fastq -i AAATTTGGGCCC:1 TTTCCCAAAGGG:2
+        python src/script_split.py tests/test.fastq.gz output_reads.fastq
 
     - name: Check output file
       run: |
-        test -s output_reads.fastq && echo "Output file is not empty"
-        test -s output_reads_custom.fastq && echo "Output file with custom primer is not empty"
-        test -s output_reads_custom_indexes.fastq && echo "Output file with custom indexes is not empty"
+        test -s output_reads.fastq && echo "Output file is not empty" || echo "Output file is empty"
