@@ -1,25 +1,19 @@
 '''
-scflow.py - Single Cell analysis workflows for cribbslab
+split_fastqcats
 ========================================================
-
-Our single-cell workflows are organised into three different sections.
-* main: contains the upstream pipelines for mapping, velocyto, QC and filtering
-* seurat: contains Seurat specific workflows
-* scanpy: contains scanpy specific workflows
-
 
 For this message and a list of available keywords type::
 
-    scflow --help
+    split_fastqcats --help
 
 
 To see the available pipelines within each section type::
 
-    scflow <section>
+    split_fastqcats <section>
 
 To run a specific pipeline/workflow type the following::
 
-    scflow <section> <workflow> [workflow options] [workflow arguments]
+    split_fastqcats <section> <workflow> [workflow options] [workflow arguments]
 
 To get help for a specify workflow, type::
 
