@@ -1,0 +1,46 @@
+name: scflow
+
+channels:
+ - conda-forge
+ - bioconda
+ - defaults
+ - r
+
+dependencies:
+ - python
+ - cgat-apps
+ - cgatcore
+ - matplotlib
+ - mygene
+ - pytest
+ - nose
+ - numpy
+ - pandas
+ - kallisto
+ - multiqc
+ - fastqc
+ - fastq-screen
+ - pep8
+ - ruffus
+ - scipy
+ - setuptools
+ - statsmodels
+ - r-base
+ - r-optparse
+ - r-seurat
+ - r-tidyverse
+ - r-ggthemes
+ - scanpy
+ - scipy
+ - papermill
+ - leidenalg
+ - bioconductor-busparse 
+ - bustools
+ - bioconductor-tximport
+ - bioconductor-dropletutils
+ - bioconductor-celda
+ - bioconductor-scdblfinder
+ - bioconductor-singlecellexperiment
+ - bioconductor-biomart
+ - r-harmony
+ - r-seuratdisk
