@@ -1,102 +1,68 @@
-'''
-split_fastqcats
-========================================================
-
-For this message and a list of available keywords type::
-
-    split_fastqcats --help
-
-
-To see the available pipelines within each section type::
-
-    split_fastqcats <section>
-
-To run a specific pipeline/workflow type the following::
-
-    split_fastqcats <section> <workflow> [workflow options] [workflow arguments]
-
-To get help for a specify workflow, type::
-
-    scflow <section> <workflow> --help
-'''
-
 import os
 import sys
-import re
 import glob
-import imp
-import scpipelines
-
+import importlib.util
+import src
 
 def main(argv=None):
 
+    # Get the command-line arguments
     argv = sys.argv
 
-    # paths to look for pipelines:
-    print(scpipelines.__file__)
-    path = os.path.abspath(os.path.dirname(scpipelines.__file__))
-    scanpy = path + "/scanpy/"
-    seurat = path + "/seurat/"
+    # Path to look for pipelines
+    path = os.path.abspath(os.path.dirname(src.__file__))
+    print(f"Searching for script in: {path}")
 
-    paths = [path, scanpy, seurat]
-
+    # If no arguments or help is requested, display the help message
     if len(argv) == 1 or argv[1] == "--help" or argv[1] == "-h":
-
-        print((globals()["__doc__"]))
-        print("The list of available sections are:\n")
-        print("main  scanpy  seurat\n")
+        print(globals()["__doc__"])
         return
 
-    elif argv[1] == "main":
-        print((globals()["__doc__"]))
-
-        pipelines = []
-        pipelines.extend(glob.glob(os.path.join(path, "pipeline_*.py")))
-        print("The list of available single cell pipelines is:\n")
-        print("{}\n".format(
-                "  ".join([os.path.basename(x)[len("pipeline_"):-len(".py")] for x in pipelines])))
-
-    elif argv[1] == "seurat":
-        print((globals()["__doc__"]))
-
-        pipelines = []
-        pipelines.extend(glob.glob(os.path.join(seurat, "pipeline_*.py")))
-        print("The list of available single cell seurat pipelines are:\n")
-        print("{}\n".format(
-                "  ".join([os.path.basename(x)[len("pipeline_"):-len(".py")] for x in pipelines])))
-
-    elif argv[1] == "scanpy":
-        print((globals()["__doc__"]))
-
-        pipelines = []
-        pipelines.extend(glob.glob(os.path.join(scanpy, "pipeline_*.py")))
-        print("The list of available single cell pipelines is:\n")
-        print("{}\n".format(
-                "  ".join([os.path.basename(x)[len("pipeline_"):-len(".py")] for x in pipelines])))
-
+    # Attempt to find and load the corresponding pipeline
     else:
-        print("please select an appropriate workflow section: main, scanpy or seurat")
+        print(globals()["__doc__"])
 
-    try:
-        command = argv[2]
-        if command == "-h" or command == "--help":
-            return
-        pipeline = "pipeline_{}".format(command)
-    except Exception:
-        print("No pipeline has been selected under the %s section" % (argv[1]))
-        print("Problems?", sys.exc_info())
-        return
+        # Searching for the pipeline script
+        pipelines = glob.glob(os.path.join(path, "script_*.py"))
+        pipeline_names = [os.path.basename(x)[len("script_"):-len(".py")] for x in pipelines]
 
-    # remove 'scflow' from sys.argv
-    del sys.argv[0]
-    del sys.argv[1]
+        if not pipelines:
+            print("Error: No scripts found.")
+            sys.exit(1)
 
-    (file, pathname, description) = imp.find_module(pipeline, paths)
+        print(f"Available scripts: {', '.join(pipeline_names)}\n")
 
-    module = imp.load_module(pipeline, file, pathname, description)
+        # Check if the pipeline argument is provided
+        if len(argv) < 2:
+            print("Error: No script specified.")
+            sys.exit(1)
 
-    module.main(sys.argv)
+        pipeline = argv[1]
+        matching_pipelines = [p for p in pipelines if os.path.basename(p) == f"script_{pipeline}.py"]
 
+        if not matching_pipelines:
+            print(f"Error: script '{pipeline}' not found.")
+            sys.exit(1)
+
+        pipeline_script = matching_pipelines[0]
+        print(f"Loading script: {pipeline_script}")
+
+        # Remove 'split_fastqcats' from sys.argv
+        del sys.argv[0]
+
+        # Load the pipeline module and execute its main function
+        try:
+            spec = importlib.util.spec_from_file_location(pipeline, pipeline_script)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            print(f"Successfully loaded module: {module.__name__}")
+            module.main(sys.argv)
+        except FileNotFoundError:
+            print(f"Error: The pipeline script '{pipeline_script}' was not found.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error loading or executing the pipeline '{pipeline}': {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     sys.exit(main())
