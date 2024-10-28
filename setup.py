@@ -60,7 +60,7 @@ setup(
     license="MIT",
     platforms=["any"],
     keywords="computational genomics",
-    long_description='split_fastqcats: cribbslab single cell script',
+    long_description='split_fastqcats: cribbslab long-read RNAseq pre-processing script',
     classifiers=[_f for _f in classifiers.split("\n") if _f],
     url="",
     # package contents
