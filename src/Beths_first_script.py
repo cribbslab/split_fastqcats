@@ -228,5 +228,42 @@ def split_reads(
         writer.writerow(["Low-quality sequences", total_lowqual])
         writer.writerow(["Binned sequences", total_binned])
 
-# Run the function
-split_reads(input_file, forward_primer, reverse_primer, indexes, processed_output, lowqual_output, bin_output, stats_output)
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+
+    default_indexes = {
+        '1':['AAATTTGGGCCC','GGGCCCAAATTT'],
+        '2':['TTTCCCAAAGGG','CCCTTTGGGAAA'],
+        '3':['GGGAAACCCTTT','AAAGGGTTTCCC'],
+        '4':['CCCGGGTTTAAA','TTTAAACCCGGG'],
+        '5':['AAACCCGGGAAA','TTTCCCGGGTTT'],
+        '6':['TTTGGGAAATTT','AAATTTCCCAAA'],
+        '7':['GGGTTTCCCGGG','CCCGGGAAACCC'],
+        '8':['CCCAAATTTCCC','GGGAAATTTGGG'],
+        '9':['AAAGGGAAAGGG','CCCTTTCCCTTT'],
+        '10':['TTTAAATTTAAA','TTTAAATTTAAA'],
+        '11':['GGGCCCGGGCCC','GGGCCCGGGCCC'],
+        '12':['CCCTTTCCCTTT','CCCTTTCCCTTT']
+    }
+
+    parser = argparse.ArgumentParser(description="Split FASTQ files based on index and primer sequences.")
+    parser.add_argument("input_file", type=str, help="Input FASTQ file (gzipped).")
+    parser.add_argument("-fp", "--forward_primer", type=str, default="AAGCAGTGGTATCAACGCAGAGT", help="Primer sequence to look for. Default is 'AAGCAGTGGTATCAACGCAGAGT'.")
+    parser.add_argument("-rp", "--reverse_primer", type=str, default="ACTCTGCGTTGATACCACTGCTT", help="Primer sequence to look for. Default is 'ACTCTGCGTTGATACCACTGCTT'.")
+    parser.add_argument("-i", "--indexes", type=str, nargs='+', help="Index sequences and their labels as 'index:label'. Default is a preset list.")
+    parser.add_argument("processed_output", type=str, help="Output of correctly processed reads - FASTQ file (gzipped).")
+    parser.add_argument("lowqual_output", type=str, help="Output of reads with one UMI or double UMI that were not flanked to primer - FASTQ file (gzipped).")
+    parser.add_argument("bin_output", type=str, help="Output of binned reads - FASTQ file (gzipped).")
+    parser.add_argument("stats_output", type=str, help="Output stats file.")
+    
+    args = parser.parse_args(argv[1:])
+
+    # Use default indexes if none are provided
+    index_dict = default_indexes if args.indexes is None else parse_indexes(args.indexes)
+
+    split_reads(args.input_file, args.forward_primer, args.reverse_primer, index_dict, args.processed_output, args.lowqual_output, args.bin_output, args.stats_output)
+
+if __name__ == "__main__":
+    main()
