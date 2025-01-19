@@ -1,76 +1,61 @@
 import sys
 import os
-import re
-import setuptools
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, find_packages
 
-from distutils.version import LooseVersion
-if LooseVersion(setuptools.__version__) < LooseVersion('1.1'):
-    print("Version detected:", LooseVersion(setuptools.__version__))
-    raise ImportError(
-        "the scflow requires setuptools 1.1 higher")
+# Check Python version
+if sys.version_info < (3, 6):
+    raise SystemExit("""Requires Python 3.6 or later.""")
 
-########################################################################
-########################################################################
-IS_OSX = sys.platform == 'darwin'
+# Read requirements
+with open('requirements.txt') as f:
+    requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
-########################################################################
-########################################################################
-# collect version
-print(sys.path.insert(0, "src"))
-import version
+# Read README for long description
+with open('README.md', 'r', encoding='utf-8') as f:
+    long_description = f.read()
 
-version = version.__version__
-
-###############################################################
-###############################################################
-# Define dependencies
-#
-major, minor1, minor2, s, tmp = sys.version_info
-
-if major < 3:
-    raise SystemExit("""Requires Python 3 or later.""")
-
-cribbslab_packages = find_packages()
-cribbslab_package_dirs = {'split_fastqcats': 'src'}
-
-##########################################################
-##########################################################
-# Classifiers
-classifiers = """
-Development Status :: 3 - Alpha
-Intended Audience :: Science/Research
-Intended Audience :: Developers
-License :: OSI Approved
-Programming Language :: Python
-Topic :: Software Development
-Topic :: Scientific/Engineering
-Operating System :: POSIX
-Operating System :: Unix
-Operating System :: MacOS
-"""
+# Read version from __init__.py
+with open('src/__init__.py', 'r') as f:
+    for line in f:
+        if line.startswith('__version__'):
+            version = line.strip().split('=')[1].strip(' \'"')
+            break
 
 setup(
-    # package information
     name='split_fastqcats',
     version=version,
-    description='split_fastqcats',
+    description='A tool for processing and splitting FastQ reads based on primer sequences',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     author='Adam Cribbs',
     author_email='adam.cribbs@ndorms.ox.ac.uk',
-    license="MIT",
-    platforms=["any"],
-    keywords="computational genomics",
-    long_description='split_fastqcats: cribbslab long-read RNAseq pre-processing script',
-    classifiers=[_f for _f in classifiers.split("\n") if _f],
-    url="",
-    # package contents
-    packages=cribbslab_packages,
-    package_dir=cribbslab_package_dirs,
-    include_package_data=True,
+    url='https://github.com/cribbslab/split_fastqcats',
+    license='MIT',
+    packages=find_packages(where='src'),
+    package_dir={'': 'src'},
+    install_requires=requirements,
     entry_points={
-        "console_scripts": ["split_fastqcats = src.entry:main"]
+        'console_scripts': [
+            'split-fastqcats=split_fastqcats.fastq_splitter:main',
+        ],
     },
-    # other options
+    python_requires='>=3.6',
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
+        'Operating System :: POSIX',
+        'Operating System :: Unix',
+        'Operating System :: MacOS',
+    ],
+    keywords=['bioinformatics', 'sequencing', 'fastq', 'primer', 'processing'],
+    include_package_data=True,
     zip_safe=False,
-    test_suite="tests",
+    test_suite='tests',
 )
