@@ -1,4 +1,4 @@
-name: Test Script with Default Parameters
+name: Run Tests
 
 on:
   push:
@@ -9,27 +9,51 @@ on:
       - main
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install biopython
+        pip install -e .
+        pip install pytest
 
-    - name: Run script with default parameters
+    - name: Run tests
       run: |
-        python src/script_split.py tests/test.fastq.gz output_reads.fastq
+        pytest tests/
 
-    - name: Check output file
+    - name: Run integration test
       run: |
-        test -s output_reads.fastq && echo "Output file is not empty" || echo "Output file is empty"
+        mkdir -p output
+        split_fastqcats tests/test.fastq.gz \
+          --output-dir output \
+          --processed-output processed.fastq \
+          --lowqual-output lowqual.fastq \
+          --bin-output binned.fastq \
+          --stats-output stats.txt
+
+    - name: Check output files
+      run: |
+        for file in output/*.fastq; do
+          if [ -s "$file" ]; then
+            echo "$file exists and is not empty"
+          else
+            echo "$file is empty or missing"
+            exit 1
+          fi
+        done
+        if [ -s "output/stats.txt" ]; then
+          echo "Stats file exists and is not empty"
+        else
+          echo "Stats file is empty or missing"
+          exit 1
+        fi
