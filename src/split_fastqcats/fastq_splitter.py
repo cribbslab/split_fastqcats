@@ -286,18 +286,22 @@ def main():
 
     parser = argparse.ArgumentParser(description="Split FASTQ files based on index and primer sequences.")
     parser.add_argument("input_file", help="Input FASTQ file (gzipped)")
-    parser.add_argument("-fp", "--forward_primer",
+    parser.add_argument("--processed-output", required=True,
+                       help="Output file for processed reads")
+    parser.add_argument("--lowqual-output", required=True,
+                       help="Output file for low quality reads")
+    parser.add_argument("--bin-output", required=True,
+                       help="Output file for binned reads")
+    parser.add_argument("--stats-output", required=True,
+                       help="Output statistics file")
+    parser.add_argument("-fp", "--forward-primer",
                        default="AAGCAGTGGTATCAACGCAGAGT",
                        help="Forward primer sequence")
-    parser.add_argument("-rp", "--reverse_primer",
+    parser.add_argument("-rp", "--reverse-primer",
                        default="ACTCTGCGTTGATACCACTGCTT",
                        help="Reverse primer sequence")
     parser.add_argument("-i", "--indexes", nargs='+',
                        help="Index sequences as 'index:start_seq,end_seq'")
-    parser.add_argument("processed_output", help="Output for processed reads")
-    parser.add_argument("lowqual_output", help="Output for low quality reads")
-    parser.add_argument("bin_output", help="Output for binned reads")
-    parser.add_argument("stats_output", help="Output statistics file")
 
     args = parser.parse_args()
 

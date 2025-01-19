@@ -34,12 +34,11 @@ jobs:
     - name: Run integration test
       run: |
         mkdir -p output
-        split_fastqcats tests/test.fastq.gz \
-          --output-dir output \
-          --processed-output processed.fastq \
-          --lowqual-output lowqual.fastq \
-          --bin-output binned.fastq \
-          --stats-output stats.txt
+        split-fastqcats tests/test.fastq.gz \
+          --processed-output output/processed.fastq \
+          --lowqual-output output/lowqual.fastq \
+          --bin-output output/binned.fastq \
+          --stats-output output/stats.txt
 
     - name: Check output files
       run: |
