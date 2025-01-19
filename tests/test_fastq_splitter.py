@@ -5,7 +5,7 @@ from Bio.SeqRecord import SeqRecord
 import tempfile
 import gzip
 import os
-from src.fastq_splitter import FastqSplitter
+from split_fastqcats import FastqSplitter
 
 class TestFastqSplitter(unittest.TestCase):
     def setUp(self):
