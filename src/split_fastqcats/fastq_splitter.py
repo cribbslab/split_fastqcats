@@ -55,33 +55,39 @@ class FastqSplitter:
         """
         matches = []
         primer_length = len(primer)
-        min_score_threshold = 0.75 * primer_length * self.aligner.match_score
+        min_score_threshold = 0.60 * primer_length * self.aligner.match_score  
 
-        for i in range(len(sequence) - primer_length + 1):
-            sub_seq = sequence[i:i + primer_length]
-            alignments = self.aligner.align(sub_seq, primer)
-            
-            if not alignments:
-                continue
+        # Also search for reverse complement
+        rev_comp_primer = str(Seq(primer).reverse_complement())
+        
+        for search_primer in [primer, rev_comp_primer]:
+            for i in range(len(sequence) - primer_length + 1):
+                sub_seq = sequence[i:i + primer_length]
+                alignments = self.aligner.align(sub_seq, search_primer)
                 
-            alignment = alignments[0]
-            score = alignment.score
-            
-            if score >= min_score_threshold:
-                mismatches = sum(1 for a, b in zip(sub_seq, primer) if a != b)
-                if mismatches <= max_mismatches:
-                    matches.append({
-                        'start': i,
-                        'end': i + primer_length,
-                        'score': score,
-                        'mismatches': mismatches
-                    })
+                if not alignments:
+                    continue
                     
-        return sorted(matches, key=lambda x: (x['mismatches'], x['start']))
+                alignment = alignments[0]
+                score = alignment.score
+                
+                if score >= min_score_threshold:
+                    mismatches = sum(1 for a, b in zip(sub_seq, search_primer) if a != b)
+                    if mismatches <= max_mismatches:
+                        matches.append({
+                            'start': i,
+                            'end': i + primer_length,
+                            'score': score,
+                            'mismatches': mismatches,
+                            'sequence': sub_seq,
+                            'is_reverse': search_primer == rev_comp_primer
+                        })
+                    
+        return sorted(matches, key=lambda x: (x['mismatches'], -x['score'], x['start']))
 
     def find_best_primer_pairs(self, sequence: str) -> List[dict]:
         """
-        Find the best matching primer pairs in the sequence.
+        Find all valid primer pairs in the sequence.
         
         Args:
             sequence: Input DNA sequence
@@ -93,90 +99,107 @@ class FastqSplitter:
         reverse_matches = self.smith_waterman_search(sequence, self.reverse_primer)
         
         paired_sequences = []
-        used_reverse_indices = set()
-
-        for f_match in forward_matches:
-            best_pair = None
-            best_distance = float('inf')
-            best_mismatches = float('inf')
-
-            for r_match in reverse_matches:
-                if r_match['start'] > f_match['end'] and r_match['start'] not in used_reverse_indices:
-                    distance = r_match['start'] - f_match['end']
-                    total_mismatches = f_match['mismatches'] + r_match['mismatches']
-                    
-                    if distance < best_distance or (distance == best_distance and total_mismatches < best_mismatches):
-                        best_distance = distance
-                        best_mismatches = total_mismatches
-                        best_pair = r_match
+        used_positions = set()  # Track used positions to avoid overlaps
+        
+        # Consider all matches as potential primers in either direction
+        all_matches = [(pos, 'forward') for pos in forward_matches] + [(pos, 'reverse') for pos in reverse_matches]
+        all_matches.sort(key=lambda x: x[0]['start'])  # Sort by position
+        
+        for i, (match1, type1) in enumerate(all_matches[:-1]):  # Look at all pairs of adjacent matches
+            pos1_start = match1['start']
+            pos1_end = match1['end']
             
-            if best_pair:
-                paired_sequences.append({
-                    'trimmed_seq': sequence[f_match['end']:best_pair['start']],
-                    'forward': (f_match['start'], f_match['end']),
-                    'reverse': (best_pair['start'], best_pair['end']),
-                    'total_mismatches': f_match['mismatches'] + best_pair['mismatches']
-                })
-                used_reverse_indices.add(best_pair['start'])
-
+            # Skip if this position has been used
+            if pos1_start in used_positions or pos1_end in used_positions:
+                continue
+                
+            for match2, type2 in all_matches[i+1:]:  # Look at all subsequent matches
+                pos2_start = match2['start']
+                pos2_end = match2['end']
+                
+                # Skip if this position has been used
+                if pos2_start in used_positions or pos2_end in used_positions:
+                    continue
+                
+                # Check if we have a valid pair (one forward, one reverse)
+                valid_pair = False
+                if type1 == 'forward' and type2 == 'reverse':
+                    valid_pair = True
+                elif type1 == 'reverse' and type2 == 'forward':
+                    # Swap them to maintain forward->reverse order
+                    match1, match2 = match2, match1
+                    pos1_start, pos2_start = pos2_start, pos1_start
+                    pos1_end, pos2_end = pos2_end, pos1_end
+                    valid_pair = True
+                
+                if valid_pair:
+                    # Check if the distance between primers is reasonable
+                    distance = pos2_start - pos1_end
+                    if 10 <= distance <= 2000:
+                        segment = {
+                            'trimmed_seq': sequence[pos1_end:pos2_start],
+                            'forward': (pos1_start, pos1_end),
+                            'reverse': (pos2_start, pos2_end),
+                            'total_mismatches': match1['mismatches'] + match2['mismatches'],
+                            'forward_seq': match1['sequence'],
+                            'reverse_seq': match2['sequence']
+                        }
+                        paired_sequences.append(segment)
+                        used_positions.update([pos1_start, pos1_end, pos2_start, pos2_end])
+                        break  # Move to next first position
+        
         return paired_sequences
 
-    def process_record(self, record: SeqRecord) -> Tuple[List[SeqRecord], str]:
+    def process_record(self, record: SeqRecord) -> List[Tuple[SeqRecord, str]]:
         """
-        Process a single FastQ record.
+        Process a single FastQ record and split it into multiple records if needed.
         
         Args:
             record: SeqRecord object to process
             
         Returns:
-            Tuple of (processed records, classification)
+            List of tuples (processed record, classification)
         """
         seq = str(record.seq)
         matches = self.find_best_primer_pairs(seq)
         
-        if not matches or len(matches) > 10:
-            return [], 'binned'
+        if not matches:
+            return [(record, 'binned')]
 
         processed_records = []
-        for match in matches:
+        for i, match in enumerate(matches, 1):
             trimmed_seq = match['trimmed_seq']
             
-            # Check for indexes
-            forward_found = False
-            reverse_found = False
-            
-            for index_pair in self.index_dict.values():
-                start_index, end_index = index_pair
+            # Skip segments that are too short or too long
+            if len(trimmed_seq) < 50 or len(trimmed_seq) > 5000:
+                continue
                 
-                f_matches = self.smith_waterman_search(trimmed_seq, start_index)
-                if f_matches and f_matches[0]['score'] >= 0.83 * len(start_index) * 2:
-                    forward_found = True
-                    
-                r_matches = self.smith_waterman_search(trimmed_seq, end_index)
-                if r_matches and r_matches[0]['score'] >= 0.83 * len(end_index) * 2:
-                    reverse_found = True
-                    
-                if forward_found and reverse_found:
-                    break
+            # Create new record ID with segment number
+            new_id = f"{record.id}_segment_{i}"
+            
+            try:
+                # Get quality scores for the trimmed segment
+                trimmed_qual = record.letter_annotations["phred_quality"][
+                    match['forward'][1]:match['reverse'][0]
+                ]
+                
+                # Create new record with trimmed sequence
+                new_record = SeqRecord(
+                    Seq(trimmed_seq),
+                    id=new_id,
+                    description=f"{record.description} length={len(trimmed_seq)}",
+                    letter_annotations={"phred_quality": trimmed_qual}
+                )
+                
+                processed_records.append((new_record, 'processed'))
+                
+            except Exception:
+                continue
 
-            # Create new record with trimmed sequence
-            new_record = SeqRecord(
-                Seq(trimmed_seq),
-                id=record.id,
-                description=record.description,
-                letter_annotations={
-                    "phred_quality": record.letter_annotations["phred_quality"][
-                        match['forward'][1]:match['reverse'][0]
-                    ]
-                }
-            )
+        if not processed_records:
+            return [(record, 'binned')]
             
-            if forward_found and reverse_found:
-                return [new_record], 'processed'
-            elif forward_found or reverse_found:
-                return [new_record], 'lowqual'
-                
-        return [], 'binned'
+        return processed_records
 
     def split_reads(self, input_file: str, processed_output: str, lowqual_output: str,
                    bin_output: str, stats_output: str):
@@ -192,6 +215,7 @@ class FastqSplitter:
         """
         stats = {
             'total_sequences': 0,
+            'total_segments': 0,
             'processed': 0,
             'lowqual': 0,
             'binned': 0
@@ -204,17 +228,19 @@ class FastqSplitter:
         with gzip.open(input_file, 'rt') as handle:
             for record in SeqIO.parse(handle, 'fastq'):
                 stats['total_sequences'] += 1
-                records, classification = self.process_record(record)
+                processed_segments = self.process_record(record)
+                stats['total_segments'] += len(processed_segments)
                 
-                if classification == 'processed':
-                    processed_records.extend(records)
-                    stats['processed'] += 1
-                elif classification == 'lowqual':
-                    lowqual_records.extend(records)
-                    stats['lowqual'] += 1
-                else:
-                    binned_records.append(record)
-                    stats['binned'] += 1
+                for new_record, classification in processed_segments:
+                    if classification == 'processed':
+                        processed_records.append(new_record)
+                        stats['processed'] += 1
+                    elif classification == 'lowqual':
+                        lowqual_records.append(new_record)
+                        stats['lowqual'] += 1
+                    else:
+                        binned_records.append(new_record)
+                        stats['binned'] += 1
 
         # Write output files
         with gzip.open(processed_output, 'wt') as handle:
