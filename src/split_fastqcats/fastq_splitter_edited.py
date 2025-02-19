@@ -174,32 +174,20 @@ class FastqSplitter:
                 # Skip segments that are too short or too long
                 if len(check_trimmed_seq) < 50 or len(check_trimmed_seq) > 5000:
                     continue
-            
-                #cut out for now
-                #if match_count == 1:
-                   #sequences_with_one_match += 1
-
                 
                 umi_candidate = check_trimmed_seq[-12:]
                 umi_pattern = regex.compile(r'((?:(?:A{3}|T{3}|C{3}|G{3})){4}){i<=0,e<=1}')
                 umi_match = umi_pattern.fullmatch(umi_candidate)
             
-                if umi_match:
-                    umi_seq = umi_match.group(1)
-                    # Create new record ID with segment number and UMI
-                    new_id = f"{record.id}_segment_{i}_{umi_seq}"
-                    classification = 'processed'
-                else:
-                    new_id = f"{record.id}_segment_{i}"
-                    classification = 'lowqual'
-                    continue
+                umi_seq = umi_match.group(1) if umi_match else None
+                new_id = f"{record.id}_segment_{i}" + (f"_{umi_seq}" if umi_seq else "")
             
                 polyA = regex.findall("(AAAAAAAA){e<=0}", str(seq))
             
-                if polyA:
-                    continue
+                if umi_seq and polyA:  
+                    classification = "processed"  # UMI and polyA present = processed
                 else:
-                    classification = 'lowqual'
+                    classification = "lowqual"   # Either missing = lowqual
                 
                 try:
                     #Get quality of trimmed seq
@@ -213,18 +201,18 @@ class FastqSplitter:
                         Seq(trimmed_seq),
                         id=new_id,
                         description=f"{record.description} length={len(trimmed_seq)}",
-                        letter_annotations={"phred_quality": quality}
+                        letter_annotations={"phred_quality": trimmed_qual}
                     )
                 
-                    processed_records.append((new_record, classification))
+                    results_records.append((new_record, classification))
                 
                 except Exception:
                     continue
 
-        if not processed_records:
+        if not results:
             return [(record, 'binned')]
             
-        return processed_records
+        return results_records
 
     
     def worker(self, args: str):
@@ -271,9 +259,10 @@ class FastqSplitter:
             with Pool(num_workers) as pool:
                 results = pool.map(self.worker, args)
 
-            stats['total_segments'] += len(results)
+            all_results = [record_tuple for sublist in results for record_tuple in sublist]
+	    stats['total_segments'] = len(all_results)
                 
-            for new_record, classification in processed_records:
+            for new_record, classification in all_results:
                 if classification == 'processed':
                     processed_records.append(new_record)
                     stats['processed'] += 1
@@ -358,4 +347,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
