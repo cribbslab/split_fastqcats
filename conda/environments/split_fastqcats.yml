@@ -8,6 +8,10 @@ channels:
 
 dependencies:
  - python==3.11
- - biopython
+ - biopython>=1.81
  - pytest
  - nose
+ - regex>=2023.0.0
+ - tqdm  # addded for progressbar
+ - pandas  
+ - mypy 
