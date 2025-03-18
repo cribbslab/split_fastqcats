@@ -196,7 +196,7 @@ class FastqSplitter:
                         match['forward'][0]:match['reverse'][1]
                     ]
                     if match['reversed']:  # If the primer pair is reversed
-                        trimmed_qual = record.letter_annotations["phred_quality"][match['reverse'][1]:match['forward'][0]][::-1]
+                        trimmed_qual = record.letter_annotations["phred_quality"][match['reverse'][0]:match['forward'][1]][::-1]
                     else:
                         trimmed_qual = record.letter_annotations["phred_quality"][match['forward'][0]:match['reverse'][1]]
     
