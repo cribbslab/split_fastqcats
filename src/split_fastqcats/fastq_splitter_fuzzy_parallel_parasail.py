@@ -4,7 +4,7 @@
 # - Filters reads without polyA
 # - Parallelised for efficient processing of large patient samples
 # Further edits by Anand to improve parallelisation and logging.
-
+import numpy as np
 import time
 from tqdm import tqdm
 import regex
@@ -12,6 +12,7 @@ import math
 import sys
 import argparse
 import gzip
+import parasail  # Fast SIMD-based sequence alignment
 from Bio import SeqIO, Align
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
@@ -43,10 +44,26 @@ class FastqSplitter:
         self.aligner.mode = 'local'
         self.aligner.match_score = 2
         self.aligner.mismatch_score = -1
-        self.aligner.open_gap_score = -3
-        self.aligner.extend_gap_score = -1
+        self.aligner.open_gap_score = 3
+        self.aligner.extend_gap_score = 1
+    
+    
+    #def count_mismatches(seq1, seq2):
+    #  return np.sum(np.array(list(seq1)) != np.array(list(seq2)))
+    
+    
 
-    def smith_waterman_search(self, sequence: str, primer: str, error: float = 0.25) -> List[dict]:
+    def count_mismatches(seq1: str, seq2: str) -> int:
+      """Count mismatches between two sequences using NumPy."""
+      return np.sum(np.frombuffer(seq1.encode(), dtype=np.uint8) != np.frombuffer(seq2.encode(), dtype=np.uint8))
+    
+    def has_polyA_tail(seq: str, window_size=300, threshold=8) -> bool:
+      """Check if a sequence has a poly-A stretch of at least `threshold` A's in the last `window_size` bases."""
+      tail = seq[-window_size:]  # Get last 300 bases
+      return "A" * threshold in tail  # Look for a stretch of A's
+
+    
+    def smith_waterman_search(self, sequence: str, read_name: str, primer: str, error: float = 0.25) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
         
@@ -71,36 +88,68 @@ class FastqSplitter:
             min_score_threshold = (1 - (error / primer_length)) * primer_length * self.aligner.match_score
             max_mismatches = int(error)  # Use error directly as max_mismatches
         
-        min_score_threshold = 0.80 * primer_length * self.aligner.match_score  
+        min_score_threshold = 0.60 * primer_length * self.aligner.match_score  
 
         # Also search for reverse complement
         rev_comp_primer = str(Seq(primer).reverse_complement())
+        scoring_matrix = parasail.matrix_create("ACGT", 2, -1)
         
         for search_primer in [primer, rev_comp_primer]:
-            for i in range(len(sequence) - primer_length + 1):
-                sub_seq = sequence[i:i + primer_length]
-                alignments = self.aligner.align(sub_seq, search_primer)
+        #for i in range(len(sequence) - primer_length + 1):
+            
+            
+            #sub_seq = sequence[i:i + primer_length]
+            #alignments = self.aligner.align(sub_seq, search_primer)
+            
+            # Perform Parasail alignment
+            alignment = parasail.sw_trace_striped_16(
+                sequence, search_primer,
+                3,#self.aligner.open_gap_score, # Gap opening penalty
+                1,#self.aligner.extend_gap_score, # Gap extension penalty
+                #parasail.matrix_create("ACGT", self.aligner.match_score, self.aligner.mismatch_score)
+                scoring_matrix
+                #parasail.dnafull  # DNA-specific scoring matrix
+            )
+            
+            # **Check if alignment score is valid**
+            if alignment is None or alignment.score is None or alignment.traceback is None:
+                continue  # Skip this pattern if alignment failed
                 
-                if not alignments:
-                    continue
-                    
-                alignment = alignments[0]
-                score = alignment.score
+            #alignment = alignments[0]
+            score = alignment.score
+            
+            # Extract actual alignment details
+            aligned_query = alignment.traceback.query
+            aligned_pattern = alignment.traceback.ref
+
+            # Count mismatches and gaps
+            mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
+            #gaps = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q == '-' or p == '-')
+            #mismatches = self.count_mismatches(aligned_query, aligned_pattern)
+            gaps = aligned_query.count('-') + aligned_pattern.count('-')
+
+            
+            
+            min_score_threshold = 0.80 * primer_length * self.aligner.match_score  
+            
+            if score >= min_score_threshold:
+                max_mismatches = 5
+                # Ensure start position is valid
+                start_position = max(0, alignment.end_query - primer_length + 1)
+                #mismatches = sum(1 for a, b in zip(sub_seq, search_primer) if a != b)
+                if mismatches <= max_mismatches:
+                    print(aligned_query)
+                    print(aligned_pattern)
+                    matches.append({
+                        'start': start_position,
+                        'end': start_position + primer_length,
+                        'score': score,
+                        'mismatches': mismatches,
+                        'gaps': gaps,
+                        'sequence': read_name,
+                        'is_reverse': search_primer == rev_comp_primer
+                    })
                 
-                if score >= min_score_threshold:
-                    max_mismatches = 5
-                    mismatches = sum(1 for a, b in zip(sub_seq, search_primer) if a != b)
-                    if mismatches <= max_mismatches:
-                        print("Next read")
-                        matches.append({
-                            'start': i,
-                            'end': i + primer_length,
-                            'score': score,
-                            'mismatches': mismatches,
-                            'sequence': sub_seq,
-                            'is_reverse': search_primer == rev_comp_primer
-                        })
-                    
         return sorted(matches, key=lambda x: (x['mismatches'], -x['score'], x['start']))
     
     
@@ -115,8 +164,8 @@ class FastqSplitter:
         Returns:
             List of dictionaries containing paired sequence information
         """
-        forward_matches = self.smith_waterman_search(sequence, self.forward_primer)
-        reverse_matches = self.smith_waterman_search(sequence, self.reverse_primer)
+        forward_matches = self.smith_waterman_search(sequence, read_name, self.forward_primer)
+        reverse_matches = self.smith_waterman_search(sequence, read_name, self.reverse_primer)
         
         paired_sequences = []
         used_positions = set()  # Track used positions to avoid overlaps
@@ -207,6 +256,7 @@ class FastqSplitter:
     
                 umi_seq = True
                 polyA = regex.findall("(AAAAAAAA){e<=0}", str(seq))
+                #polyA = self.has_polyA_tail(seq, window_size=300, threshold=8)  # Use new optimized function
     
                 classification = "processed" if umi_seq and polyA else "lowqual"
     
@@ -253,7 +303,7 @@ class FastqSplitter:
         #return self.process_record(records_chunk)
 
     def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str,
-                   bin_output: str, stats_output: str, num_workers: int):
+                   bin_output: str, stats_output: str, num_workers: int, chunk_size:int):
         """
         Split FastQ reads based on primer pairs and indexes.
         
@@ -284,8 +334,8 @@ class FastqSplitter:
             stats['total_sequences'] = total_records
 
             # Split records into chunks
-            chunk_size = len(records) // num_workers
-            chunk_size=1000
+            #chunk_size = len(records) // num_workers
+            #chunk_size=1000
             chunks = [records[i:i + chunk_size] for i in range(0, len(records), chunk_size)]
             
             # Debug print: Total reads and number of chunks
@@ -300,7 +350,7 @@ class FastqSplitter:
                 with tqdm(total=total_records, desc="Processing Reads", unit=" reads") as pbar:
                     results = []
 
-                    for result in pool.imap(self.worker, args):
+                    for result in pool.map_async(self.worker, chunks).get():
                         # Flatten the results from the worker
                         results.extend(result)
                         pbar.update(len(args[0]))  # Update progress bar after processing each chunk
@@ -397,7 +447,7 @@ def main():
 
     parser.add_argument("--num_workers", type=int, default=4,
                        help="Number of parallel workers (CPUs), default is 4")
-
+    parser.add_argument("--chunk-size", type=int, default=1000, help="Number of reads per chunk")
     args = parser.parse_args()
 
     # Use the new parse_indexes function
@@ -410,7 +460,8 @@ def main():
         args.lowqual_output,
         args.bin_output,
         args.stats_output,
-        args.num_workers
+        args.num_workers,
+        args.chunk_size
     )
 
 if __name__ == "__main__":

@@ -32,8 +32,8 @@ class FastqSplitter:
         self.aligner.mode = 'local'
         self.aligner.match_score = 2
         self.aligner.mismatch_score = -1
-        self.aligner.open_gap_score = -1
-        self.aligner.extend_gap_score = -0.5
+        self.aligner.open_gap_score = -3
+        self.aligner.extend_gap_score = -1
     
     
     def smith_waterman_search(self, sequence: str, record_id: str, errors: Union[int, float] = None) -> List[dict]:
@@ -90,13 +90,13 @@ class FastqSplitter:
                             })
     
         # Sort by best match criteria (lowest mismatches, highest score, earliest start position)
-        sorted_matches = sorted(best_matches, key=lambda x: (x['mismatches'], -x['score'], x['start']))
+        sorted_matches = sorted(best_matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
     
         # Log results for debugging
         if sorted_matches:
             print(f"Read Name: {record_id}")
             for match in sorted_matches:
-                print(f"  Pattern: {match['pattern']}, Start Position: {match['start']}, Mismatches: {match['mismatches']}, Score: {match['score']}")
+                print(f"  Pattern: {match['pattern']}, Start Position: {match['start']}, Mismatches: {match['mismatches']}, Score: {match['score']}, Score threshold: {min_score_threshold}")
     
         return sorted_matches
 
@@ -115,11 +115,12 @@ class FastqSplitter:
             start_position = current_match['start']
             end_position = current_match['end']
             next_start_position = matches[i + 1]['start'] if i + 1 < len(matches) else len(seq)
-    
+            
             subsequence = seq[start_position:next_start_position]
     
             # Make sure the subsequence length is within the valid range
             if len(subsequence) < 50 or len(subsequence) > 5000:
+                print(f"DEBUG: Skipping segment {record.id}_segment_{i+1}, Length: {len(subsequence)}")
                 continue
     
             new_id = f"{record.id}_segment_{i + 1}"
@@ -153,7 +154,7 @@ class FastqSplitter:
             results.extend(processed_segments)
         return results
     
-    def parallel_split_reads(self, input_file: str, processed_output: str, bin_output: str, stats_output: str, num_workers: int, errors: int):
+    def parallel_split_reads(self, input_file: str, processed_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int, errors: int):
         stats = {
             'total_sequences': 0,
             'total_segments': 0,
@@ -163,6 +164,7 @@ class FastqSplitter:
     
         processed_records = {str(i): [] for i in range(1, len(self.index_dict))}  # Dictionary to store 12 files, one for each index
         binned_records = []
+        index_counts = {sequence: 0 for sequence in self.index_dict.values()}  # Use the actual index sequence as keys
     
         start_time = time.time()  # Start timer
         
@@ -188,12 +190,12 @@ class FastqSplitter:
                         results.extend(result)
                         pbar.update(len(result))  # Update progress bar after processing each chunk
     
-                    all_results = results
-                    stats['total_segments'] = len(all_results)
+                    #all_results = results
+                    stats['total_segments'] = len(results)
                     print("\n Sorting segments to output files... \n")
     
                     # Classify and categorize the results
-                    for new_record, classification in all_results:
+                    for new_record, classification in results:
                         index_label =  classification
                         print(f"Adding to processed: {new_record.id}, Index label: {index_label}")  # Debugging print
        
@@ -205,6 +207,7 @@ class FastqSplitter:
                             
                             # Add the record to the appropriate index file
                             processed_records[index_label].append(new_record)
+                            index_counts[index_label] += 1  # Increment the count for this index
                             stats['processed'] += 1
                         else:
                             binned_records.append(new_record)
@@ -229,6 +232,10 @@ class FastqSplitter:
             writer.writerow(["Metric", "Value"])
             for metric, value in stats.items():
                 writer.writerow([metric, value])
+            # Write the count of segments for each index
+            writer.writerow(["Index", "SegmentCount"])
+            for index, count in index_counts.items():
+                writer.writerow([index, count])
     
         # Calculate and print the total time taken
         end_time = time.time()
@@ -267,11 +274,11 @@ def main():
     parser.add_argument("--processed-output", required=True, help="Output file for processed reads")
     parser.add_argument("--bin-output", required=True, help="Output file for binned reads")
     parser.add_argument("--stats-output", required=True, help="Output statistics file")
-    parser.add_argument("-fp", "--forward-primer", default="AAGCAGTGGTATCAACGCAGAGT", help="Forward primer sequence")
+    parser.add_argument("-fp", "--forward-primer", default="AAGCAGTGGT", help="Forward primer sequence")
     
     # Accept a list of index sequences
     parser.add_argument("--indexes", nargs='+', help="List of index sequences (e.g. 'AAATTTGGGCCC' 'TTTCCCAAAGGG')")
-
+    parser.add_argument("--chunk_size", type=int, default=1000, help="Number of reads per chunk")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of parallel workers (CPUs), default is 4")
     parser.add_argument("--errors", type=float, default=4, help="Number of errors allowed, default is 4")
 
@@ -287,6 +294,7 @@ def main():
         args.bin_output,
         args.stats_output,
         args.num_workers,
+        args.chunk_size,
         args.errors
     )
     
