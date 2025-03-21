@@ -74,6 +74,7 @@ class FastqSplitter:
     
             # Make sure the subsequence length is within the valid range
             if len(subsequence) < 50 or len(subsequence) > 5000:
+                
                 continue
     
             new_id = f"{record.id}_segment_{i + 1}"
@@ -107,7 +108,7 @@ class FastqSplitter:
             results.extend(processed_segments)
         return results
     
-    def parallel_split_reads(self, input_file: str, processed_output: str, bin_output: str, stats_output: str, num_workers: int, errors: int):
+    def parallel_split_reads(self, input_file: str, processed_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int, errors: int):
         stats = {
             'total_sequences': 0,
             'total_segments': 0,
@@ -117,6 +118,8 @@ class FastqSplitter:
     
         processed_records = {str(i): [] for i in range(1, len(self.index_dict))}  # Dictionary to store 12 files, one for each index
         binned_records = []
+        index_counts = {sequence: 0 for sequence in self.index_dict.values()}  # Use the actual index sequence as keys
+    
     
         start_time = time.time()  # Start timer
         
@@ -126,18 +129,18 @@ class FastqSplitter:
             stats['total_sequences'] = total_records
     
             # Split records into chunks
-            chunk_size = len(records) // num_workers
+            #chunk_size = len(records) // num_workers
             chunks = [records[i:i + chunk_size] for i in range(0, len(records), chunk_size)]
     
             # Prepare arguments for worker processes
-            args = [(chunk) for chunk in chunks]
+            #args = [(chunk) for chunk in chunks]
     
             # Initialize the progress bar
             with Pool(num_workers) as pool:
                 with tqdm(total=total_records, desc="Processing Reads", unit=" reads") as pbar:
                     results = []
     
-                    for result in pool.imap(self.worker, args):
+                    for result in pool.imap(self.worker, chunks):
                         # Flatten the results from the worker
                         results.extend(result)
                         pbar.update(len(result))  # Update progress bar after processing each chunk
@@ -150,7 +153,7 @@ class FastqSplitter:
                     for new_record, classification in all_results:
                         index_label =  classification
                         if classification in self.index_dict.values():  
-                            print(f"Adding to processed: {new_record.id}, Index label: {index_label}")  # Debugging print
+                            print(f"Adding to processed: {new_record.id}, Index label: {index_label}, Length {len(new_record)}bp")  # Debugging print
                            
                             # Initialize the list for this index if it doesn't exist
                             if index_label not in processed_records:
@@ -158,6 +161,8 @@ class FastqSplitter:
                             
                             # Add the record to the appropriate index file
                             processed_records[index_label].append(new_record)
+                            
+                            index_counts[index_label] += 1  # Increment the count for this index
                             stats['processed'] += 1
                         else:
                             binned_records.append(new_record)
@@ -182,6 +187,10 @@ class FastqSplitter:
             writer.writerow(["Metric", "Value"])
             for metric, value in stats.items():
                 writer.writerow([metric, value])
+            # Write the count of segments for each index
+            writer.writerow(["Index", "Count"])
+            for index, count in index_counts.items():
+                writer.writerow([index, count])
     
         # Calculate and print the total time taken
         end_time = time.time()
@@ -220,11 +229,11 @@ def main():
     parser.add_argument("--processed-output", required=True, help="Output file for processed reads")
     parser.add_argument("--bin-output", required=True, help="Output file for binned reads")
     parser.add_argument("--stats-output", required=True, help="Output statistics file")
-    parser.add_argument("-fp", "--forward-primer", default="AAGCAGTGGTATCAACGCAGAGT", help="Forward primer sequence")
+    parser.add_argument("-fp", "--forward-primer", default="AAGCAGTGGTATC", help="Forward primer sequence")
     
     # Accept a list of index sequences
     parser.add_argument("--indexes", nargs='+', help="List of index sequences (e.g. 'AAATTTGGGCCC' 'TTTCCCAAAGGG')")
-
+    parser.add_argument("--chunk_size", type=int, default=1000, help="Number of reads per chunk")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of parallel workers (CPUs), default is 4")
     parser.add_argument("--errors", type=int, default=4, help="Number of errors allowed, default is 4")
 
@@ -240,6 +249,7 @@ def main():
         args.bin_output,
         args.stats_output,
         args.num_workers,
+        args.chunk_size,
         args.errors
     )
     
