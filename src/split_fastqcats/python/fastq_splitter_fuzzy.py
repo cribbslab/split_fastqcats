@@ -27,7 +27,7 @@ from typing import Dict, List, Tuple, Optional
 from multiprocessing import Pool, cpu_count
 
 class FastqSplitter:
-    def __init__(self, forward_primer: str, reverse_primer: str, error: float):
+    def __init__(self, forward_primer: str, reverse_primer: str, error: float, sw: int):
         """
         Initialize the FastQ splitter with primers and index dictionary.
         
@@ -41,21 +41,25 @@ class FastqSplitter:
         self.forward_primer = forward_primer
         self.reverse_primer = reverse_primer
         self.error = error
+        self.sw_version = sw
         self.aligner = Align.PairwiseAligner()
         self._setup_aligner()
 
     def _setup_aligner(self):
         """Configure the Smith-Waterman aligner with scoring parameters."""
+        #Biopython PairwiseAligner arguments
         self.aligner.mode = 'local'
         self.aligner.match_score = 2
         self.aligner.mismatch_score = -1
         self.aligner.open_gap_score = -1
         self.aligner.extend_gap_score = -0.5
+        #Parasail arguments
         self.match_score = 2
         self.mismatch_score = -1
         self.open_gap_score = 1
         self.extend_gap_score = 1
-
+    
+    #original single step sliding window Biopython aligner - very slow 10 reads/sec
     def smith_waterman_search(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
@@ -121,7 +125,7 @@ class FastqSplitter:
                     
         return sorted(matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
 
-
+    ##Biopython aligner with 100bp windows and 50bp overlapping step - fast 125 reads per sec
     def smith_waterman_search2(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
@@ -165,14 +169,18 @@ class FastqSplitter:
             step_size = 50
             
             for i in range(0, len(sequence) - primer_length + 1, step_size):
-            #for i in range(len(sequence) - primer_length + 1):
                 sub_seq = sequence[i:min(i + window_size, len(sequence))]
                 alignments = self.aligner.align(sub_seq, search_primer)
                 
                 if not alignments:
                     continue
+                  
+                filtered_alignments = [alignment for alignment in alignments if alignment.score >= min_score_threshold]   
+                
+                if not filtered_alignments:
+                    continue
                     
-                alignment = alignments[0]
+                alignment = filtered_alignments[0]
                 score = alignment.score
                 
                 start_pos = alignment.coordinates[0][0] + i
@@ -198,7 +206,7 @@ class FastqSplitter:
                     
         return sorted(matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
 
-
+    #Biopython aligner without windows - simply take all alignments across full sequence - fast 250 reads per sec
     def smith_waterman_search3(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
@@ -244,7 +252,7 @@ class FastqSplitter:
             
             filtered_alignments = [alignment for alignment in alignments if alignment.score >= min_score_threshold]   
             
-            if not alignments:
+            if not filtered_alignments:
                 #print("No filtered alignment")
                 continue
               
@@ -271,8 +279,8 @@ class FastqSplitter:
              
               
         return sorted(matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
-
-
+    
+    #Parasail aligner tool with 100bp window and 50bp overlapping step - very fast -- 1000 reads/sec
     def smith_waterman_search4(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
@@ -286,7 +294,7 @@ class FastqSplitter:
             List of dictionaries containing match information
         """
         
-        #log_message(f"Performing Smith-Waterman search for Read={read_name} with primer={primer}", logging.DEBUG)
+        log_message(f"Performing Smith-Waterman search for Read={read_name} with primer={primer}", logging.DEBUG)
     
         
         matches = []
@@ -335,7 +343,8 @@ class FastqSplitter:
                 
                 # Ensure start position is valid
                 start_position = max(0, alignment.end_query - pattern_length + 1 + start)
-                
+                end_position = min(len(sequence), start_position + pattern_length)
+            
                 # Create a unique identifier for each match
                 match_key = (search_primer, start_position)
     
@@ -363,7 +372,7 @@ class FastqSplitter:
                     if mismatches <= max_mismatches:
                         matches.append({
                             'start': start_position,
-                            'end': start_position + primer_length,
+                            'end': end_position,
                             'primer': search_primer,
                             'score': alignment.score,
                             'mismatches': mismatches,
@@ -388,8 +397,8 @@ class FastqSplitter:
         """
         #log_message(f"Processing Read={read_name}")
         
-        forward_matches = self.smith_waterman_search(sequence, read_name, self.forward_primer)
-        reverse_matches = self.smith_waterman_search(sequence, read_name, self.reverse_primer)
+        forward_matches = self.smith_waterman_search4(sequence, read_name, self.forward_primer)
+        reverse_matches = self.smith_waterman_search4(sequence, read_name, self.reverse_primer)
         
         paired_sequences = []
         used_positions = set()  # Track used positions to avoid overlaps
@@ -771,6 +780,8 @@ def main():
     parser.add_argument("-rp", "--reverse-primer",
                        default="GTACTCTGCGTTGATACCACTGCTT",
                        help="Reverse primer sequence")
+    parser.add_argument("-sw", "--smith-waterman", type=int, choices=[1, 2, 3, 4], default=4,
+                        help="Select Smith-Waterman search version (1, 2, 3, or 4). Default is 4.")
     parser.add_argument("-e","--error", type=float, default=0.3, 
                        help="Number of errors allowed, default is 0.3")
     parser.add_argument("--chunk-size", type=int, default=1000,  
@@ -802,7 +813,7 @@ def main():
     start_time = time.time()  
     log_message(f"Starting read processing with {args.num_workers} threads and chunk size {args.chunk_size}")
     log_message(f"Scanning for FP {args.forward_primer} and RP {args.reverse_primer} in {args.input_file} with error tolerance {args.error}.")
-    splitter = FastqSplitter(args.forward_primer, args.reverse_primer, args.error)
+    splitter = FastqSplitter(args.forward_primer, args.reverse_primer, args.error, args.smith_waterman)
     splitter.parallel_split_reads(
         args.input_file,
         args.processed_output,
