@@ -1,17 +1,28 @@
 name: fastcats
 
 channels:
- - conda-forge
- - bioconda
- - defaults
- - r
+  - bioconda
+  - conda-forge
+  - defaults
+  - r
 
 dependencies:
- - python==3.11
- - biopython>=1.81
- - pytest
- - nose
- - regex>=2023.0.0
- - tqdm  # addded for progressbar
- - pandas  
- - mypy 
+  - click
+  - cgat-apps
+  - cgatcore
+  - biopython>=1.81
+  - flake8
+  - minimap2
+  - mypy
+  - nose
+  - pandas
+  - pysam
+  - regex>=2023.0.0
+  - samtools
+  - scipy
+  - tabix
+  - tqdm  # added for progress bar
+  - umi_tools
+  - pytest
+  - python==3.11
+
