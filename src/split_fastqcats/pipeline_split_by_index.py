@@ -57,6 +57,10 @@ PARAMS = P.get_parameters([
 
 # Get the list of indexes from the YAML config file
 INDEXES = PARAMS.get('indexes', [])
+SEQUENCESUFFIXES = ("*.fastq.gz")
+
+FASTQTARGET = tuple([os.path.join("data.dir/", suffix_name)
+                       for suffix_name in SEQUENCESUFFIXES])
 PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
 BASH_ROOT = os.path.join(os.path.dirname(__file__), "bash/")
 
@@ -94,7 +98,7 @@ def separate_by_index(infile, outfile):
                    --bin-output %(name)s.binned_fastq.gz \
                    --stats-output %(name)s.stats.csv \
                    -res %(results_dir)s -i %(infile)s -v --indexes %(barcodes)s'''
-    P.run(statement, job_options='-t 02:00:00', job_memory="20GB", job_threads=8, without_cluster = False)
+    P.run(statement, job_options='-t 02:00:00', job_memory="20G", job_threads=8, without_cluster = False)
 
 @follows(separate_by_index)
 @follows(mkdir("merged_results.dir"))
