@@ -12,13 +12,17 @@ def merge_stats(input_dir, output_file):
         'processed_reads': 0,
         'total_segments': 0,
         'full_length_segments': 0,
-        'lowqual_segments': 0
+        'lowqual_segments': 0,
+        'binned_reads_0': 0,
+	'binned_reads_1':0
     }
-    
+
+    sample_name = os.path.basename(output_file).replace('.stats.csv', '')
+
     # Use os.walk to traverse directories recursively
     for root, dirs, files in os.walk(input_dir):
         for stats_file in files:
-            if stats_file.endswith(".stats.csv"):
+            if stats_file.startswith(sample_name) and stats_file.endswith(".stats.csv"):
                 stats_filepath = os.path.join(root, stats_file)
                 
                 # Read the stats file into a DataFrame
