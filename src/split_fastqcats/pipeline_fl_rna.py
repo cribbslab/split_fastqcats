@@ -56,6 +56,10 @@ PARAMS = P.get_parameters([
     "pipeline.yml"])
 
 # Get the list of indexes from the YAML config file
+SEQUENCESUFFIXES = ("*.fastq.gz")
+
+FASTQTARGET = tuple([os.path.join("data.dir/", suffix_name)
+                       for suffix_name in SEQUENCESUFFIXES])
 
 PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
 BASH_ROOT = os.path.join(os.path.dirname(__file__), "bash/")
