@@ -799,7 +799,7 @@ def main():
     
     # Make the results directory if it doesn't exist
     if not os.path.exists(args.results_dir):
-        os.makedirs(args.results_dir)
+        os.makedirs(args.results_dir, exist_ok=True)
     
     args.processed_output = os.path.join(args.results_dir, args.processed_output)
     args.lowqual_output = os.path.join(args.results_dir, args.lowqual_output)

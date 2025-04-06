@@ -626,7 +626,7 @@ class FastqSplitter:
                             index_counts[classification] += 1  # Increment the count for this index
                             stats['processed_segments'] += 1
                         else:
-                            binned_records.append(new_record)
+                            lowqual_records.append(new_record)
                             stats['lowqual_segments'] += 1
                             
                     # Debug print: After all chunks are processed
@@ -737,7 +737,7 @@ def main():
     
     # Make the results directory if it doesn't exist
     if not os.path.exists(args.results_dir):
-        os.makedirs(args.results_dir)
+        os.makedirs(args.results_dir, exist_ok=True)
     
     args.processed_output = os.path.join(args.results_dir, args.processed_output)
     args.lowqual_output = os.path.join(args.results_dir, args.lowqual_output)
@@ -755,8 +755,8 @@ def main():
     splitter.parallel_split_reads(
         args.input_file,
         args.processed_output,
-        args.bin_output,
         args.lowqual_output,
+        args.bin_output,
         args.stats_output,
         args.num_workers,
         args.chunk_size

@@ -23,5 +23,6 @@ indexes:
   - CCCTTTCCCTTT
 
 split: 400000
-job_options: -t 48:00:00
+
+job_options: -t 18:00:00
 

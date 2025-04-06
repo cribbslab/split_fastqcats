@@ -56,13 +56,10 @@ PARAMS = P.get_parameters([
     "pipeline.yml"])
 
 # Get the list of indexes from the YAML config file
-FP = PARAMS['FP']
-RP = PARAMS['RP']
-
 SEQUENCESUFFIXES = ("*.fastq.gz")
-FASTQTARGET = tuple([os.path.join("data.dir/", suffix_name)
-                     for suffix_name in SEQUENCESUFFIXES])
 
+FASTQTARGET = tuple([os.path.join("data.dir/", suffix_name)
+                       for suffix_name in SEQUENCESUFFIXES])
 
 PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
 BASH_ROOT = os.path.join(os.path.dirname(__file__), "bash/")
@@ -78,52 +75,58 @@ def split_fastq(infile, outfile):
     '''
     infile = "".join(infile)
     name = infile.replace('data.dir/','').replace('.fastq.gz','')
-    statement = '''zcat %(infile)s | split -l %(split)s -d --additional-suffix=.fastq.gz %(name)s. &&
-                   mv %(name)s* split_tmp.dir/'''
+    statement = '''zcat %(infile)s | split -l %(split)s --additional-suffix=.fastq - %(name)s. && mv %(name)s* split_tmp.dir/ && gzip split_tmp.dir/*.fastq'''
     P.run(statement)
 
 @follows(split_fastq)
 @follows(mkdir("separate_samples.dir"))
 @transform('split_tmp.dir/*.fastq.gz',
            regex("split_tmp.dir/(\S+).fastq.gz"),
-           r"separate_samples.dir/\1")
-def separate_by_index(infile, outfile):
+           r"separate_samples.dir/\1/\1.stats.csv")
+
+def separate_by_primer_pairs(infile, outfile):
     '''
     Identify barcode and split reads accordingly using a different script.
     '''
+    PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
     name = os.path.basename(infile).replace('.fastq.gz', '')
     results_dir = os.path.join("separate_samples.dir", name)
-    statement = '''mkdir -p %(results_dir)s &&
-                   python %(PYTHON_ROOT)s/fastq_splitter_fuzzy.py -e 0.3 --num_workers 16 \
-                   --processed-output %(results_dir)s/%(name)s.processed.fastq.gz \
-                   --lowqual-output %(results_dir)s/%(name)s.lowqual.fastq.gz \
-                   --bin-output %(results_dir)s/%(name)s.binned_fastq.gz \
-                   --stats-output %(results_dir)s/%(name)s.stats.csv \
+    statement = ''' python %(PYTHON_ROOT)s/fastq_splitter_fuzzy.py -e 0.3 --num_workers 8 \
+                   --processed-output %(name)s.processed.fastq.gz \
+                   --lowqual-output %(name)s.lowqual.fastq.gz \
+                   --bin-output %(name)s.binned_fastq.gz \
+                   --stats-output %(name)s.stats.csv \
                    -res %(results_dir)s -i %(infile)s -fp %(FP)s -rp %(RP)s -v'''
-    P.run(statement)
+    P.run(statement, job_options='-t 01:00:00', job_memory="20G", job_threads=8, without_cluster = False)
 
-@follows(separate_by_index)
+@follows(separate_by_primer_pairs)
 @follows(mkdir("merged_results.dir"))
-@originate("merged_results.dir/merge_complete")
-def merge_by_index(outfile):
+@transform('data.dir/*.fastq.gz',
+           regex('data.dir/(\S+).fastq.gz'),
+           r"merged_results.dir/\1.merge_complete")
+
+def merge_by_sample(infile, outfile):
     '''
     Merge binned, lowqual, and processed fastq files from separate_samples.dir.
     '''
-    statement = '''cat separate_samples.dir/*/*.binned_fastq.gz > merged_results.dir/all.binned_fastq.gz &&
-                   cat separate_samples.dir/*/*.lowqual.fastq.gz > merged_results.dir/all.lowqual.fastq.gz &&
-                   cat separate_samples.dir/*/*.processed.fastq.gz > merged_results.dir/all.processed.fastq.gz &&
+    name = os.path.basename(infile).replace('.fastq.gz', '')
+    statement = '''cat separate_samples.dir/%(name)s.*/*.binned_fastq.gz > merged_results.dir/%(name)s.binned_fastq.gz &&
+                   cat separate_samples.dir/%(name)s.*/*.lowqual.fastq.gz > merged_results.dir/%(name)s.lowqual.fastq.gz &&
+                   cat separate_samples.dir/%(name)s.*/*.processed.fastq.gz > merged_results.dir/%(name)s.processed.fastq.gz &&
                    touch %(outfile)s'''
     P.run(statement)
 
-@follows(merge_by_index)
-@originate("merged_results.dir/merged_stats.csv")
-def merge_stats(outfile):
+@follows(merge_by_sample)
+@transform('data.dir/*.fastq.gz',
+           regex('data.dir/(\S+).fastq.gz'),
+           r"merged_results.dir/\1.merged_stats.csv")
+def merge_stats(infile, outfile):
     '''
     Merge stats from all separate_samples.dir into a single CSV file.
     '''
-    name_stem = os.path.basename(outfile).replace(".csv", "")
+    name = os.path.basename(infile).replace('.fastq.gz', '.stats.csv')
     PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
-    statement = '''python %(PYTHON_ROOT)s/merge_primer_stats.py --output %(outfile)s --input-dir separate_samples.dir'''
+    statement = '''python %(PYTHON_ROOT)s/merge_primer_stats.py --output merged_results.dir/%(name)s --input-dir separate_samples.dir'''
     P.run(statement)
 
 @follows(merge_stats)

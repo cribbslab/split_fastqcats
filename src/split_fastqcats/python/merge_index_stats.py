@@ -1,55 +1,77 @@
+import pandas as pd
 import os
 import argparse
-import pandas as pd
 
 def merge_stats_by_index(input_dir, output_file):
-    """
-    Merge all individual stats CSV files from input_dir into a single CSV file.
-    The final output will be saved in output_file.
-    """
+    # Get the sample name by stripping the '.index_stats.csv' from the output filename
+    sample_name = os.path.basename(output_file).replace('.index_stats.csv', '')
+
+    # Initialize a list to store the stats files
     stats_files = []
 
-    # Find all stats files
-    for root, _, files in os.walk(input_dir):
+    # Walk through the input directory and its subdirectories
+    for root, dirs, files in os.walk(input_dir):
         for file in files:
-            if file.endswith(".stats.csv"):
+            # Only include files that start with the sample name and end with '.stats.csv'
+            if file.startswith(sample_name) and file.endswith(".stats.csv"):
                 stats_files.append(os.path.join(root, file))
 
-    # Storage for combined metrics
-    merged_metrics = {}
+    # Initialize a dictionary to store merged index counts
     merged_index_counts = {}
+    merged_metrics = {}
 
+    # Process each stats file
     for stats_file in stats_files:
-        df = pd.read_csv(stats_file, sep="\t")  # Assuming tab-separated values
+        # Read the CSV file
+        df = pd.read_csv(stats_file, header=None)
 
-        # Separate metrics and index counts
-        for _, row in df.iterrows():
-            key = row.iloc[0]  # First column contains the metric/index
-            value = row.iloc[1]  # Second column contains the value
+        # First table (First 7 rows)
+        # Assuming the first 7 rows contain metric data
+        metric_df = df.iloc[:7]
+        metric_df.columns = metric_df.iloc[0]  # Set the first row as column headers
+        metric_df = metric_df[1:]
+        # Second table (Next 13 rows)
+        # Assuming the next 13 rows contain index counts
+        index_df = df.iloc[7:20]
+        index_df.columns = index_df.iloc[0]  # Set the first row as column headers
+        index_df = index_df[1:]
 
-            if key.startswith("total_") or key in ["processed_reads", "lowqual_segments", "binned_reads"]:
-                merged_metrics[key] = merged_metrics.get(key, 0) + value
-            else:  # These are index counts
-                merged_index_counts[key] = merged_index_counts.get(key, 0) + value
+        # Process metrics
 
-    # Convert to DataFrame
+        # Aggregate metrics (sum values)
+        for _, row in metric_df.iterrows():
+            metric = row['Metric']
+            count = int(row['Value'])  # Convert to float
+            merged_metrics[metric] = merged_metrics.get(metric, 0) + count
+
+
+        # Process index counts (the second table)
+        for _, row in index_df.iterrows():
+            index = row['Index']
+            count = int(row['SegmentCount'])  # Ensure this is an integer
+            merged_index_counts[index] = merged_index_counts.get(index, 0) + count
+
+    # Convert the merged metrics to DataFrame
     metrics_df = pd.DataFrame(list(merged_metrics.items()), columns=["Metric", "Value"])
+    # Convert the merged index counts to DataFrame
     index_df = pd.DataFrame(list(merged_index_counts.items()), columns=["Index", "SegmentCount"])
-
-    # Write to output file
-    output_path = os.path.join(output_file, "merged_index_stats.csv")
-    with open(output_path, "w") as f:
-        metrics_df.to_csv(f, sep="\t", index=False)
-        f.write("\n")  # Separate sections
-        index_df.to_csv(f, sep="\t", index=False)
+    
+    # Write both metrics and index counts to the output file (tab-separated)
+    with open(output_file, "w") as f:
+        # Write the metrics first
+        metrics_df.to_csv(f, sep=",", index=False)
+        f.write("\n")  # Add a newline between the two tables
+        # Write the index counts
+        index_df.to_csv(f, sep=",", index=False)
+    # Write the merged statistics to the output file (tab-separated)
+    #index_df.to_csv(output_file, sep=",", index=False)
 
 def main():
     parser = argparse.ArgumentParser(description="Merge index stats from all chunks into one file.")
     parser.add_argument("--input-dir", required=True, help="Directory containing individual index stats CSV files.")
-    parser.add_argument("--output-file", required=True, help="Directory to save the merged stats file.")
+    parser.add_argument("--output-file", required=True, help="Output file to save the merged stats.")
 
     args = parser.parse_args()
-
     merge_stats_by_index(args.input_dir, args.output_file)
 
 if __name__ == "__main__":
