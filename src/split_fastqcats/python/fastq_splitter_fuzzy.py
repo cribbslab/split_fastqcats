@@ -656,9 +656,13 @@ class FastqSplitter:
         lowqual_records = []
         binned_records = []
         
+        # Open input records                
+        if input_file.endswith('.gz'):
+            handle = gzip.open(input_file, 'rt')
+        else:
+            handle = open(input_file, 'r')
         
-        # Open input records
-        with gzip.open(input_file, 'rt') as handle:
+        with handle:
             records = list(SeqIO.parse(handle, 'fastq'))
             total_records = len(records)
             stats['total_reads'] = total_records
