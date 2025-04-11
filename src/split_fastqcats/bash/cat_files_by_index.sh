@@ -12,7 +12,7 @@ echo "Sample: $sample"
 
 
 # Merge binned files
-cat separate_samples.dir/${sample}*/*.binned_fastq.gz > merged_results.dir/${sample}.all.binned_fastq.gz
+cat separate_samples.dir/${sample}*/*.binned.fastq.gz > merged_results.dir/${sample}.all.binned.fastq.gz
 
 # Merge lowqual files
 cat separate_samples.dir/${sample}*/*.lowqual.fastq.gz > merged_results.dir/${sample}.all.lowqual.fastq.gz

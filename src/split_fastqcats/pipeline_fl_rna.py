@@ -56,6 +56,7 @@ PARAMS = P.get_parameters([
     "pipeline.yml"])
 
 # Get the list of indexes from the YAML config file
+
 SEQUENCESUFFIXES = ("*.fastq.gz")
 
 FASTQTARGET = tuple([os.path.join("data.dir/", suffix_name)
@@ -68,20 +69,20 @@ BASH_ROOT = os.path.join(os.path.dirname(__file__), "bash/")
 @follows(mkdir("split_tmp.dir"))
 @transform('data.dir/*.fastq.gz',
            regex('data.dir/(\S+).fastq.gz'),
-           r"split_tmp.dir/\1.aa.fastq.gz")
+           r"split_tmp.dir/\1.aa.fastq")
 def split_fastq(infile, outfile):
     '''
     Split the fastq file into smaller chunks.
     '''
     infile = "".join(infile)
     name = infile.replace('data.dir/','').replace('.fastq.gz','')
-    statement = '''zcat %(infile)s | split -l %(split)s --additional-suffix=.fastq - %(name)s. && mv %(name)s* split_tmp.dir/ && gzip split_tmp.dir/*.fastq'''
+    statement = '''zcat %(infile)s | split -l %(split)s --additional-suffix=.fastq - %(name)s. && mv %(name)s*.fastq split_tmp.dir/ '''
     P.run(statement)
 
 @follows(split_fastq)
 @follows(mkdir("separate_samples.dir"))
-@transform('split_tmp.dir/*.fastq.gz',
-           regex("split_tmp.dir/(\S+).fastq.gz"),
+@transform('split_tmp.dir/*.fastq',
+           regex("split_tmp.dir/(\S+).fastq"),
            r"separate_samples.dir/\1/\1.stats.csv")
 
 def separate_by_primer_pairs(infile, outfile):
@@ -89,15 +90,15 @@ def separate_by_primer_pairs(infile, outfile):
     Identify barcode and split reads accordingly using a different script.
     '''
     PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
-    name = os.path.basename(infile).replace('.fastq.gz', '')
+    name = os.path.basename(infile).replace('.fastq', '')
     results_dir = os.path.join("separate_samples.dir", name)
-    statement = ''' python %(PYTHON_ROOT)s/fastq_splitter_fuzzy.py -e 0.3 --num_workers 8 \
+    statement = ''' python %(PYTHON_ROOT)s/fastq_splitter_fuzzy.py -e 0.3 --num_workers 4 \
                    --processed-output %(name)s.processed.fastq.gz \
                    --lowqual-output %(name)s.lowqual.fastq.gz \
-                   --bin-output %(name)s.binned_fastq.gz \
+                   --bin-output %(name)s.binned.fastq.gz \
                    --stats-output %(name)s.stats.csv \
                    -res %(results_dir)s -i %(infile)s -fp %(FP)s -rp %(RP)s -v'''
-    P.run(statement, job_options='-t 01:00:00', job_memory="20G", job_threads=8, without_cluster = False)
+    P.run(statement, job_options='-t 01:30:00', job_memory="20G", job_threads=4, without_cluster = False)
 
 @follows(separate_by_primer_pairs)
 @follows(mkdir("merged_results.dir"))
@@ -110,7 +111,7 @@ def merge_by_sample(infile, outfile):
     Merge binned, lowqual, and processed fastq files from separate_samples.dir.
     '''
     name = os.path.basename(infile).replace('.fastq.gz', '')
-    statement = '''cat separate_samples.dir/%(name)s.*/*.binned_fastq.gz > merged_results.dir/%(name)s.binned_fastq.gz &&
+    statement = '''cat separate_samples.dir/%(name)s.*/*.binned.fastq.gz > merged_results.dir/%(name)s.binned.fastq.gz &&
                    cat separate_samples.dir/%(name)s.*/*.lowqual.fastq.gz > merged_results.dir/%(name)s.lowqual.fastq.gz &&
                    cat separate_samples.dir/%(name)s.*/*.processed.fastq.gz > merged_results.dir/%(name)s.processed.fastq.gz &&
                    touch %(outfile)s'''

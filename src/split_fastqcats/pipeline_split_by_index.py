@@ -55,19 +55,21 @@ PARAMS = P.get_parameters([
     "../pipeline.yml",
     "pipeline.yml"])
 
-# Get the list of indexes from the YAML config file
-INDEXES = PARAMS.get('indexes', [])
+
 SEQUENCESUFFIXES = ("*.fastq.gz")
 
 FASTQTARGET = tuple([os.path.join("data.dir/", suffix_name)
                        for suffix_name in SEQUENCESUFFIXES])
+
+# Get the list of indexes from the YAML config file
+INDEXES = PARAMS.get('indexes', [])
 PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
 BASH_ROOT = os.path.join(os.path.dirname(__file__), "bash/")
 
 @follows(mkdir("split_tmp.dir"))
 @transform('data.dir/*.fastq.gz',
            regex('data.dir/(\S+).fastq.gz'),
-           r"split_tmp.dir/\1.aa.fastq.gz")
+           r"split_tmp.dir/\1.aa.fastq")
 def split_fastq(infile, outfile):
     '''
     Split the fastq file into smaller chunks.
@@ -75,30 +77,30 @@ def split_fastq(infile, outfile):
     infile = "".join(infile)
     name = infile.replace('data.dir/','').replace('.fastq.gz','')
     statement = '''zcat %(infile)s | split -l %(split)s --additional-suffix=.fastq - %(name)s. &&
-                   mv %(name)s* split_tmp.dir/ && gzip split_tmp.dir/*.fastq'''
+                   mv %(name)s*.fastq split_tmp.dir/'''
     P.run(statement)
 
 @follows(split_fastq)
 @follows(mkdir("separate_samples.dir"))
-@transform('split_tmp.dir/*.fastq.gz',
-           regex("split_tmp.dir/(\S+).fastq.gz"),
+@transform('split_tmp.dir/*.fastq',
+           regex("split_tmp.dir/(\S+).fastq"),
            r"separate_samples.dir/\1/\1.stats.csv")
 def separate_by_index(infile, outfile):
     '''
     Identify barcode and split reads accordingly using a different script.
     '''
     PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
-    name = os.path.basename(infile).replace('.fastq.gz', '')
+    name = os.path.basename(infile).replace('.fastq', '')
     results_dir = os.path.join("separate_samples.dir", name)
     barcodes = " ".join(INDEXES)
     statement = '''mkdir -p %(results_dir)s &&
-                   python %(PYTHON_ROOT)s/fastq_splitter_index_fuzzy.py -e 3 --num_workers 8 \
+                   python %(PYTHON_ROOT)s/fastq_splitter_index_fuzzy.py -e %(error)s --num_workers 4 \
                    --processed-output %(name)s.processed \
                    --lowqual-output %(name)s.lowqual.fastq.gz \
-                   --bin-output %(name)s.binned_fastq.gz \
+                   --bin-output %(name)s.binned.fastq.gz \
                    --stats-output %(name)s.stats.csv \
                    -res %(results_dir)s -i %(infile)s -v --indexes %(barcodes)s'''
-    P.run(statement, job_options='-t 02:00:00', job_memory="20G", job_threads=8, without_cluster = False)
+    P.run(statement, job_options='-t 03:00:00', job_memory="20G", job_threads=4, without_cluster = False)
 
 @follows(separate_by_index)
 @follows(mkdir("merged_results.dir"))

@@ -4,6 +4,7 @@ import logging
 import sys
 import argparse
 import gzip
+import math
 from Bio import SeqIO, Align
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
@@ -567,10 +568,14 @@ class FastqSplitter:
         for index_label in self.index_dict.values():
             if index_label not in processed_records:
                 processed_records[index_label] = []
-                
         
+        # Open input records         
+        if input_file.endswith('.gz'):
+            handle = gzip.open(input_file, 'rt')
+        else:
+            handle = open(input_file, 'r')
         
-        with gzip.open(input_file, 'rt') as handle:
+        with handle:
             records = list(SeqIO.parse(handle, 'fastq'))
             total_records = len(records)
             stats['total_reads'] = total_records
