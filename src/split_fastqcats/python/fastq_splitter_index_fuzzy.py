@@ -526,7 +526,7 @@ class FastqSplitter:
         
                 # Add the record to the processed list with the corresponding index label
                 # Make sure the subsequence length is within the valid range
-                if len(subsequence) < 50 or len(subsequence) > 5000:
+                if len(subsequence) < 50 or len(subsequence) > 50000:
                     log_message(f"Read={record.id} -> {len(matches)} barcode/primer hits found, Skipping segment {new_id}, Length: {len(subsequence)}", logging.DEBUG)
                     results_records.append((new_record, "lowqual"))
                 else:

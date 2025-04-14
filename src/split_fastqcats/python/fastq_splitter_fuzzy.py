@@ -456,7 +456,7 @@ class FastqSplitter:
             
             # Set minimum and maximum segment size to consider valid
             distance = pos2_end - pos1_start
-            passes_length_quality = 300 <= distance <= 5000
+            passes_length_quality = 50 <= distance <= 50000
             
              # Check if match1 and match2 form a valid primer pair
             valid_pair = False
@@ -574,7 +574,7 @@ class FastqSplitter:
             
             for i, match in enumerate(matches, 1):
                 
-                correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 5000
+                correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 50000
                 umi_seq = True
                 polyA = regex.findall("(AAAAAAAA){e<=0}", str(match['trimmed_seq']))
                 valid = match['valid']

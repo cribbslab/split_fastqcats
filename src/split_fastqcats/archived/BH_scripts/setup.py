@@ -36,7 +36,7 @@ setup(
     install_requires=requirements,
     entry_points={
         'console_scripts': [
-            'split-fastqcats=split_fastqcats.entry:main',
+            'split-fastqcats=split_fastqcats.fastq_splitter:main',
         ],
     },
     python_requires='>=3.6',
