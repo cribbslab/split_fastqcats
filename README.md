@@ -52,45 +52,186 @@ pip install -e .
 
 Basic usage:
 ```bash
-split-fastqcats input.fastq.gz \
-    -fp AAGCAGTGGTATCAACGCAGAGT \
-    -rp ACTCTGCGTTGATACCACTGCTT \
-    processed.fastq.gz \
-    lowqual.fastq.gz \
-    bin.fastq.gz \
-    stats.csv
-```
 
-Arguments:
-- `input.fastq.gz`: Input FastQ file (gzipped)
-- `-fp, --forward_primer`: Forward primer sequence (default: AAGCAGTGGTATCAACGCAGAGT)
-- `-rp, --reverse_primer`: Reverse primer sequence (default: ACTCTGCGTTGATACCACTGCTT)
-- `-i, --indexes`: Optional index sequences as 'index:start_seq,end_seq'
-- `processed.fastq.gz`: Output file for correctly processed reads
-- `lowqual.fastq.gz`: Output file for low quality reads
-- `bin.fastq.gz`: Output file for binned reads
-- `stats.csv`: Output statistics file
+# Primer Pair Split
+split-fastqcats primer_pair_split \
+    -i input.fastq.gz \
+    --processed-output processed.fastq.gz \
+    --lowqual-output lowqual.fastq.gz \
+    --bin-output bin.fastq.gz \
+    --stats-output stats.csv \
+    -fp AAGCAGTGGTATCAACGCAGAGTGAAT \
+    -rp GTACTCTGCGTTGATACCACTGCTT \ ## Note primer input orientation
+    --smith-waterman 4 \
+    --error 0.3 \
+    --chunk-size 1000 \
+    --num_workers 4 \
+    -v
+
+# Barcode Split
+split-fastqcats barcode_split \
+    -i input.fastq.gz \
+    --indexes AAATTTGGGCCC TTTCCCAAAGGG \
+    --processed-output processed.fastq.gz \
+    --lowqual-output lowqual.fastq.gz \
+    --bin-output bin.fastq.gz \
+    --stats-output stats.csv \
+    -fp AAGCAGTGGT \
+    --error 4 \
+    --chunk-size 1000 \
+    --num_workers 4 \
+    -v
+
+```
+## Arguments
+
+### Primer Pair Split
+
+- `-i, --input_file`: Input FASTQ file (gzipped)
+- `-res, --results-dir`: Output directory (default is based on input filename)
+- `--processed-output`: Output file for correctly processed reads
+- `--lowqual-output`: Output file for low-quality reads
+- `--bin-output`: Output file for binned reads
+- `--stats-output`: Output statistics file (CSV)
+- `-fp, --forward-primer`: Forward primer sequence (default: `AAGCAGTGGTATCAACGCAGAGTGAAT`)
+- `-rp, --reverse-primer`: Reverse primer sequence (default: `GTACTCTGCGTTGATACCACTGCTT`)
+- `-e, --error`: Number of allowed mismatches (default: `0.3`)
+- `--chunk-size`: Number of reads per chunk (default: `1000`)
+- `--num_workers`: Number of parallel workers (default: `4`)
+- `-v, --verbose`: Enable detailed logging
+
+### Barcode/Index Split
+
+- `-i, --input_file`: Input FASTQ file (gzipped)
+- `-res, --results-dir`: Output directory (default is based on input filename)
+- `--processed-output`: Output file for processed reads, one per index
+- `--lowqual-output`: Output file for low-quality reads
+- `--bin-output`: Output file for binned reads (no barcode)
+- `--stats-output`: Output statistics file (CSV)
+- `-fp, --forward-primer`: Forward primer sequence (default: `AAGCAGTGGT`)
+- `--indexes`: List of index/barcode sequences
+- `-e, --error`: Number of allowed mismatches (default: `3`)
+- `--chunk-size`: Number of reads per chunk (default: `1000`)
+- `--num_workers`: Number of parallel workers (default: `4`)
+- `-v, --verbose`: Enable detailed logging
+
+---
+
+## Outputs
+
+### Primer Pair Split Outputs
+
+1. **`processed.fastq.gz`**: Contains reads that:
+   - Have valid primer pairs
+   - Meet quality thresholds
+   - Have correct index sequences (if specified)
+
+2. **`lowqual.fastq.gz`**: Contains reads that:
+   - Have only one valid primer
+   - Have mismatched indexes
+   - Meet basic quality requirements but fail stricter criteria (e.g., length, polyA)
+
+3. **`bin.fastq.gz`**: Contains reads that:
+   - Lack valid primers
+   - Have too many primer matches (>10)
+   - Fail basic quality requirements
+
+4. **`stats.csv`**: Contains processing statistics:
+   - Total sequences processed
+   - Number of processed reads
+   - Number of low-quality reads
+   - Number of binned reads
+   - Full-length vs low-quality segment breakdown
+
+---
+
+### Barcode/Index Split Outputs
+
+1. **`processed_index_<barcode>.fastq.gz`**: One output file per index containing processed reads for that barcode.
+
+2. **`lowqual.fastq.gz`**: Contains low-quality reads that fail length filters.
+
+3. **`bin.fastq.gz`**: Contains reads with no barcode hits.
+
+4. **`stats.csv`**: Contains processing statistics:
+   - Total sequences processed
+   - Number of processed reads
+   - Number of binned reads (no barcode)
+   - Total segments identified by de-concatenation
+   - Breakdown of processed vs low-quality segments failing on length filter
+   - Barcode Count Table: A separate table giving a count of segments for each barcode in the list.
+
+
+The tool supports CGAT-style pipelines for batch processing. 
+Raw fastq.gz files to be placed is directory in the working directory called data.dir. 
+
+```bash
+# To de-concatenate and de-multiplex reads by index/barcode on a cluster (e.g. Slurmm). 
+split-fastqcats split_by_index config         # Generate pipeline.yml
+split-fastqcats split_by_index make full -v5  # Run the pipeline
+
+
+## To identify full length reads on a cluster (e.g. Slurmm)
+split-fastqcats fl_rna config         # Generate pipeline.yml
+split-fastqcats fl_rna make full -v5  # Run the pipeline
+
+
+## To run the pipelines locally without a cluster:
+split-fastqcats split_by_index make full -v5 --local
+split-fastqcats fl_rna make full -v5 --local
+
+```
+## Outputs for each sample will be produced in the merged_results.dir.
 
 ### Python API
 
 ```python
-from split_fastqcats import FastqSplitter
 
-# Initialize the splitter
-splitter = FastqSplitter(
+# To de-concatenate and identify full length reads
+from split_fastqcats import PrimerSplitter
+
+splitter = PrimerSplitter(
     forward_primer="AAGCAGTGGTATCAACGCAGAGT",
     reverse_primer="ACTCTGCGTTGATACCACTGCTT",
-    index_dict={'1': ['AAATTTGGGCCC', 'GGGCCCAAATTT']}
+    error=0.3
 )
 
-# Process reads
-splitter.split_reads(
+splitter.parallel_split_reads(
     input_file="input.fastq.gz",
     processed_output="processed.fastq.gz",
     lowqual_output="lowqual.fastq.gz",
     bin_output="bin.fastq.gz",
-    stats_output="stats.csv"
+    stats_output="stats.csv",
+    num_workers=4,
+    chunk_size=1000,
+    verbose=True
 )
+
+# To de-concatenate and de-multiplex by barcodes
+from split_fastqcats import IndexSplitter
+
+index_dict = {
+    '1': 'AAATTTGGGCCC',
+    '2': 'TTTCCCAAAGGG'
+}
+
+splitter = IndexSplitter(
+    forward_primer="AAGCAGTGGT",
+    index_dict=index_dict,
+    error=3
+)
+
+splitter.parallel_split_reads(
+    input_file="input.fastq.gz",
+    processed_output="processed.fastq.gz",
+    lowqual_output="lowqual.fastq.gz",
+    bin_output="bin.fastq.gz",
+    stats_output="stats.csv",
+    num_workers=4,
+    chunk_size=1000
+)
+
+
 ```
 
 ## Output Files
@@ -118,12 +259,15 @@ splitter.split_reads(
 
 ## Quality Control Parameters
 
-The tool implements several QC measures:
+The primer pair matching de-concatenating tool used to identify full-length mRNA implements several QC measures:
 - Smith-Waterman alignment for primer detection
-- Maximum 5 mismatches allowed in primer sequences
-- Minimum 75% match score required for primer identification
-- Index validation with 83% minimum match score
-- Position validation for index sequences
+- Minimum 70% match score required for primer identification (using default parameters)
+- Minimum sequence length 300, Max length 50,000 bp
+- Checking for polyA tails at the ends of the sequences
+
+The barcode matching de-concatenating tools uses:
+- Index validation with 80% minimum match score (using default parameters)
+- Position validation for index sequences - i.e. they should flank the primers
 
 ## Contributing
 
