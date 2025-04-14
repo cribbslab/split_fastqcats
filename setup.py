@@ -15,7 +15,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 # Read version from __init__.py
-with open('src/__init__.py', 'r') as f:
+with open('src/split_fastqcats/__init__.py', 'r') as f:
     for line in f:
         if line.startswith('__version__'):
             version = line.strip().split('=')[1].strip(' \'"')
