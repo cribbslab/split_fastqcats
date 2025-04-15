@@ -19,6 +19,8 @@ import glob
 import importlib.util
 import runpy
 import split_fastqcats
+from split_fastqcats.version import __version__
+
 
 # Map commands to helper script filenames
 HELPER_COMMANDS = {
@@ -44,6 +46,10 @@ def print_list_in_columns(l, ncolumns=2):
 def main(argv=None):
     if argv is None:
         argv = sys.argv
+    
+    if len(argv) >= 1 and argv[1] in ("--version"):
+        print(f"split-fastqcats version {__version__}")
+        return
 
     if len(argv) == 1 or argv[1] in ("--help", "-h"):
         print(__doc__)
@@ -57,7 +63,7 @@ def main(argv=None):
         print("Available pipeline commands:\n")
         print(print_list_in_columns(pipelines))
         print("\nSpecial helper commands:\n")
-        print(print_list_in_columns(HELPER_COMMANDS.keys()))
+        print(print_list_in_columns(list(HELPER_COMMANDS.keys())))
         return
 
     command = re.sub("-", "_", argv[1])

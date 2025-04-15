@@ -3,4 +3,5 @@ split_fastqcats - A tool for processing and splitting FastQ reads based on prime
 
 """
 
-__version__ = '0.0.1'
+# split_fastqcats/__init__.py
+from .version import __version__
