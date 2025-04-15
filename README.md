@@ -108,7 +108,7 @@ split-fastqcats barcode_split \
 - `--lowqual-output`: Output file for low-quality reads
 - `--bin-output`: Output file for binned reads (no barcode)
 - `--stats-output`: Output statistics file (CSV)
-- `-fp, --forward-primer`: Forward primer sequence (default: `AAGCAGTGGT`)
+- `-fp, --forward-primer`: Forward primer sequence (default: `AAGCAGTGGTATCAACGCAGAGT`)
 - `--indexes`: List of index/barcode sequences
 - `-e, --error`: Number of allowed mismatches (default: `3`)
 - `--chunk-size`: Number of reads per chunk (default: `1000`)
@@ -191,8 +191,8 @@ split-fastqcats fl_rna make full -v5 --local
 from split_fastqcats import PrimerSplitter
 
 splitter = PrimerSplitter(
-    forward_primer="AAGCAGTGGTATCAACGCAGAGT",
-    reverse_primer="ACTCTGCGTTGATACCACTGCTT",
+    forward_primer="AAGCAGTGGTATCAACGCAGAGTGAAT",
+    reverse_primer="GTACTCTGCGTTGATACCACTGCTT",
     error=0.3
 )
 
@@ -216,7 +216,7 @@ index_dict = {
 }
 
 splitter = IndexSplitter(
-    forward_primer="AAGCAGTGGT",
+    forward_primer="AAGCAGTGGTATCAACGCAGAGT",
     index_dict=index_dict,
     error=3
 )

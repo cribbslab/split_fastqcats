@@ -5,7 +5,8 @@
 # Copyright statement
 copyright: cribbslab (2021)
 
-FP: AAGCAGTGGTATCAACGCAGAGT
+FP: AAGCAGTGGTATCAACGCAGAGTGAAT
+RP: GTACTCTGCGTTGATACCACTGCTT
 
 indexes:
   - AAATTTGGGCCC
@@ -21,8 +22,8 @@ indexes:
   - GGGCCCGGGCCC
   - CCCTTTCCCTTT
 
-#change error depending on number of barcodes - 3 or 4 is best for this set
-error: 4
+## edit distance for primer matching
+error: 0.3
 split: 4000000
 
 job_options: -t 18:00:00
