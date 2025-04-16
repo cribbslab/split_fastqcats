@@ -576,9 +576,11 @@ class FastqSplitter:
                 
                 correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 50000
                 umi_seq = True
-                polyA = regex.findall("(AAAAAAAA){e<=0}", str(match['trimmed_seq']))
+                polyT = regex.findall("(TTTTTTTT){e<=0}", str(match['trimmed_seq'])[:150])
+                #polyT = False
+                polyA = regex.findall("(AAAAAAAA){e<=0}", str(match['trimmed_seq'])[-200:])
                 valid = match['valid']
-                classification = "full_length" if umi_seq and polyA and valid and correct_length else "lowqual"
+                classification = "full_length" if umi_seq and polyA and not polyT and valid and correct_length else "lowqual"
     
                 try:
                     ## modify the quality score extraction to allow reversing for flipped reads
