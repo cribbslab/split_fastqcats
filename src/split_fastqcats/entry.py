@@ -24,8 +24,8 @@ from split_fastqcats.version import __version__
 
 # Map commands to helper script filenames
 HELPER_COMMANDS = {
-    "primer_pair_split": "python/fastq_splitter_fuzzy.py",
-    "barcode_split": "python/fastq_splitter_index_fuzzy.py"
+    "primer_pair_split": "python/fastq_splitter_by_primer.py",
+    "barcode_split": "python/fastq_splitter_by_index.py"
 }
 
 
