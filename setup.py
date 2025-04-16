@@ -14,12 +14,16 @@ with open('requirements.txt') as f:
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
-# Read version from __init__.py
-with open('src/split_fastqcats/__init__.py', 'r') as f:
+# Read version from version.py
+version = None
+with open('src/split_fastqcats/version.py', 'r') as f:
     for line in f:
         if line.startswith('__version__'):
             version = line.strip().split('=')[1].strip(' \'"')
             break
+
+if version is None:
+    raise RuntimeError("Unable to find version string.")
 
 setup(
     name='split_fastqcats',
