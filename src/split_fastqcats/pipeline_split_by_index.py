@@ -116,7 +116,7 @@ def separate_by_index(infile, outfile):
                    --lowqual-output %(name)s.lowqual.fastq.gz \
                    --bin-output %(name)s.binned.fastq.gz \
                    --stats-output %(name)s.stats.csv \
-                   -res %(results_dir)s -i %(infile)s -v --indexes %(barcodes)s'''
+                   -res %(results_dir)s -i %(infile)s -fp %(FP)s --indexes %(barcodes)s -v'''
     P.run(statement, job_options='-t 03:00:00', job_memory="20G", job_threads=4, without_cluster = False)
 
 @follows(separate_by_index)

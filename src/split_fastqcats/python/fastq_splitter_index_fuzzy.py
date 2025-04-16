@@ -20,7 +20,7 @@ class FastqSplitter:
         
         log_message("Finding best barcode matches and splitting contcatenated reads into segments...")
         
-        self.forward_primer = forward_primer
+        self.forward_primer = forward_primer[:10]
         self.index_dict = index_dict
         self.aligner = Align.PairwiseAligner()
         self._setup_aligner()
@@ -722,7 +722,7 @@ def main():
                        help="Output file for low quality reads")
     parser.add_argument("--bin-output", required=True, help="Output file for binned reads")
     parser.add_argument("--stats-output", required=True, help="Output statistics file")
-    parser.add_argument("-fp", "--forward-primer", default="AAGCAGTGGT", help="Forward primer sequence")
+    parser.add_argument("-fp", "--forward-primer", default="AAGCAGTGGTATCAACGCAGAGT", help="Forward primer sequence")
     
     # Accept a list of index sequences
     parser.add_argument("--indexes", nargs='+', help="List of index sequences (e.g. 'AAATTTGGGCCC' 'TTTCCCAAAGGG')")
