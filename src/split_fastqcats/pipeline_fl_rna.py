@@ -118,7 +118,7 @@ def separate_by_primer_pairs(infile, outfile):
     PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
     name = os.path.basename(infile).replace('.fastq', '')
     results_dir = os.path.join("separate_samples.dir", name)
-    statement = ''' python %(PYTHON_ROOT)s/fastq_splitter_fuzzy.py -e 0.3 --num_workers 4 \
+    statement = ''' python %(PYTHON_ROOT)s/fastq_splitter_by_primer.py -e %(error)s --num_workers 4 \
                    --processed-output %(name)s.processed.fastq.gz \
                    --lowqual-output %(name)s.lowqual.fastq.gz \
                    --bin-output %(name)s.binned.fastq.gz \
