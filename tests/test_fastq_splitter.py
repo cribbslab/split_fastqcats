@@ -20,11 +20,12 @@ class TestFastqSplitter(unittest.TestCase):
         # Test sequence with known structure
         self.test_seq = "AAGCAGTGGTATCAACGCAGAGTGAATGGGCGTACGTACGTACGTACGTTTTTTTTTTTTCGTACTCTGCGTTGATACCACTGCTT"
         self.test_qual = [45] * len(self.test_seq)  # Dummy quality scores
+        self.test_id = "test_read"
         
         # Create test FASTQ file
         record = SeqRecord(
             Seq(self.test_seq),
-            id="test_read",
+            id=self.test_id,
             description="",
             letter_annotations={"phred_quality": self.test_qual}
         )
@@ -44,13 +45,13 @@ class TestFastqSplitter(unittest.TestCase):
 
     def test_smith_waterman_search(self):
         """Test Smith-Waterman search function"""
-        matches = self.splitter.smith_waterman_search(self.test_seq, self.forward_primer)
+        matches = self.splitter.smith_waterman_search(self.test_seq, self.test_id, self.forward_primer)
         self.assertTrue(len(matches) > 0)
         self.assertEqual(matches[0]['start'], 0)  # Should find primer at start
 
     def test_find_best_primer_pairs(self):
         """Test primer pair finding"""
-        pairs = self.splitter.find_best_primer_pairs(self.test_seq)
+        pairs = self.splitter.find_best_primer_pairs(self.test_seq, self.test_id)
         self.assertTrue(len(pairs) > 0)
         self.assertTrue('trimmed_seq' in pairs[0])
 
