@@ -33,7 +33,7 @@ sys.modules["parasail"] = DummyParasail
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from split_fastqcats import FastqSplitter
+from split_fastqcats.python.fastq_splitter_by_index import FastqSplitter
 
 @pytest.fixture
 def example_splitter():
