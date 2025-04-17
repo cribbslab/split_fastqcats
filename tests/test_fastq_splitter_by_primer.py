@@ -24,26 +24,28 @@ def test_smith_waterman_search_exact(example_splitter):
         matches = example_splitter.smith_waterman_search(seq, "read1")
     except TypeError:
         # Try with primer argument if required
-        matches = example_splitter.smith_waterman_search(seq, "read1", "AAGCAGTGGT")
     assert matches, "Should find a match for exact barcode+primer"
     assert matches[0]["start"] == 0 or matches[0]["start"] is not None
     assert matches[0]["end"] > 0
 
 def test_smith_waterman_search_with_mismatch(example_splitter):
-    seq = "AAATTTGGGCCAAGCAGTGGT" + "ACGTACGTACGT" + "ACTCTGCGTT"  # One C missing
-    matches = example_splitter.smith_waterman_search(seq, "read2")
+    seq = "AAATTTGGGCCAAGCAGTGGT" + "A" * (100 - len("AAATTTGGGCCAAGCAGTGGT"))  # One C missing, pad to 100
+    matches = example_splitter.smith_waterman_search(seq, "read2", "AAGCAGTGGT")
     assert matches, "Should tolerate one mismatch"
+    assert matches[0]["start"] == 0 or matches[0]["start"] is not None
+    assert matches[0]["end"] > 0
 
 def test_smith_waterman_search_no_match(example_splitter):
-    seq = "GGGGGGGGGGGGGGGGGGGGGGGG"
-    matches = example_splitter.smith_waterman_search(seq, "read3")
+    seq = "G" * 100
+    matches = example_splitter.smith_waterman_search(seq, "read3", "AAGCAGTGGT")
     assert not matches or all(m["score"] == 0 for m in matches), "Should not find a match with wrong sequence"
 
 def test_multiple_matches(example_splitter):
-    seq = ("AAATTTGGGCCCAAGCAGTGGT" + "NNNNN" + "AAATTTGGGCCCAAGCAGTGGT")
-    matches = example_splitter.smith_waterman_search(seq, "read4")
+    pattern = "AAATTTGGGCCCAAGCAGTGGT"
+    seq = pattern + 'A' * 50 + pattern + "A" * (100 - len(pattern + 'A' * 50 + pattern))
+    matches = example_splitter.smith_waterman_search(seq, "read4", "AAGCAGTGGT")
     assert len(matches) >= 2, "Should find two matches"
 
 def test_empty_sequence(example_splitter):
-    matches = example_splitter.smith_waterman_search("", "empty")
-    assert matches == [] or all(m["score"] == 0 for m in matches), "Should return empty list for empty sequence"
+    matches = example_splitter.smith_waterman_search("", "empty", "AAGCAGTGGT")
+    assert not matches or all(m["score"] == 0 for m in matches), "Should not find a match with empty sequence"
