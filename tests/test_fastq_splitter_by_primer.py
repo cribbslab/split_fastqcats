@@ -38,10 +38,9 @@ from split_fastqcats.python.fastq_splitter_by_primer import FastqSplitter
 @pytest.fixture
 def example_splitter():
     forward_primer = "AAGCAGTGGT"
-    reverse_primer = "ACTCTGCGTT"
     index_dict = {"1": "AAATTTGGGCCC"}
     mismatches = 2
-    return FastqSplitter(forward_primer, reverse_primer, index_dict, mismatches)
+    return FastqSplitter(forward_primer, index_dict, mismatches)
 
 def make_seqrecord(seq, name="test", qual=40):
     return SeqRecord(Seq(seq), id=name, description="", letter_annotations={"phred_quality": [qual]*len(seq)})
