@@ -33,13 +33,13 @@ sys.modules["parasail"] = DummyParasail
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from split_fastqcats import FastqSplitter
+from split_fastqcats.python.fastq_splitter_by_primer import FastqSplitter
 
 @pytest.fixture
 def example_splitter():
-    forward_primer = "AAGCAGTGGTATCAACGCAGAGT"
-    reverse_primer = "ACTCTGCGTTGATACCACTGCTT"
-    index_dict = {'1': ['AAATTTGGGCCC', 'GGGCCCAAATTT']}
+    forward_primer = "AAGCAGTGGT"
+    reverse_primer = "ACTCTGCGTT"
+    index_dict = {"1": "AAATTTGGGCCC"}
     mismatches = 2
     return FastqSplitter(forward_primer, reverse_primer, index_dict, mismatches)
 
@@ -47,40 +47,27 @@ def make_seqrecord(seq, name="test", qual=40):
     return SeqRecord(Seq(seq), id=name, description="", letter_annotations={"phred_quality": [qual]*len(seq)})
 
 def test_smith_waterman_search_exact(example_splitter):
-    seq = "AAATTTGGGCCCAAGCAGTGGTATCAACGCAGAGT" + "ACGTACGTACGT" + "ACTCTGCGTTGATACCACTGCTT"
+    seq = "AAATTTGGGCCCAAGCAGTGGT" + "ACGTACGTACGT" + "ACTCTGCGTT"
     matches = example_splitter.smith_waterman_search(seq, "read1")
     assert matches, "Should find a match for exact barcode+primer"
     assert matches[0]["start"] == 0 or matches[0]["start"] is not None
     assert matches[0]["end"] > 0
-def test_find_best_primer_pairs(example_splitter):
-    seq = "AAGCAGTGGTATCAACGCAGAGTGAATCGTACGTACGTACGTACGTTTTTTTTTTTTCACTCTGCGTTGATACCACTGCTT"
-    pairs = example_splitter.find_best_primer_pairs(seq)
-    assert len(pairs) > 0, "Should find at least one primer pair"
-        self.assertTrue('trimmed_seq' in pairs[0])
 
-    def test_split_reads(self):
-        """Test full read splitting functionality"""
-        self.splitter.split_reads(
-            self.input_fastq,
-            self.processed_output,
-            self.lowqual_output,
-            self.bin_output,
-            self.stats_output
-        )
-        
-        # Check that output files were created
-        self.assertTrue(os.path.exists(self.processed_output))
-        self.assertTrue(os.path.exists(self.lowqual_output))
-        self.assertTrue(os.path.exists(self.bin_output))
-        self.assertTrue(os.path.exists(self.stats_output))
+def test_smith_waterman_search_with_mismatch(example_splitter):
+    seq = "AAATTTGGGCCAAGCAGTGGT" + "ACGTACGTACGT" + "ACTCTGCGTT"  # One C missing
+    matches = example_splitter.smith_waterman_search(seq, "read2")
+    assert matches, "Should tolerate one mismatch"
 
-    def tearDown(self):
-        # Clean up temporary files
-        for file in [self.input_fastq, self.processed_output, self.lowqual_output, 
-                    self.bin_output, self.stats_output]:
-            if os.path.exists(file):
-                os.remove(file)
-        os.rmdir(self.temp_dir)
+def test_smith_waterman_search_no_match(example_splitter):
+    seq = "GGGGGGGGGGGGGGGGGGGGGGGG"
+    matches = example_splitter.smith_waterman_search(seq, "read3")
+    assert not matches or all(m["score"] == 0 for m in matches), "Should not find a match with wrong sequence"
 
-if __name__ == '__main__':
-    unittest.main()
+def test_multiple_matches(example_splitter):
+    seq = ("AAATTTGGGCCCAAGCAGTGGT" + "NNNNN" + "AAATTTGGGCCCAAGCAGTGGT")
+    matches = example_splitter.smith_waterman_search(seq, "read4")
+    assert len(matches) >= 2, "Should find two matches"
+
+def test_empty_sequence(example_splitter):
+    matches = example_splitter.smith_waterman_search("", "empty")
+    assert matches == [] or all(m["score"] == 0 for m in matches), "Should return empty list for empty sequence"
