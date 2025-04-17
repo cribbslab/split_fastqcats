@@ -52,11 +52,13 @@ jobs:
       run: |
         conda activate split_fastqcats
         mkdir -p output
-        split-fastqcats tests/test.fastq.gz \
-          --processed-output output/processed.fastq \
-          --lowqual-output output/lowqual.fastq \
-          --bin-output output/binned.fastq \
-          --stats-output output/stats.txt
+        split-fastqcats primer_pair_split \
+          -i tests/test.fastq.gz \
+          -res output \
+          --processed-output processed.fastq.gz \
+          --lowqual-output lowqual.fastq.gz \
+          --bin-output binned.fastq.gz \
+          --stats-output stats.csv
 
     - name: Check output files
       run: |
