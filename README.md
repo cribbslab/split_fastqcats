@@ -18,7 +18,7 @@ AAGCAGTGGTATCAACGCAGAGTGAAT---cDNA---polyA--N---UMI---GTACTCTGCGTTGATACCACTGCTT
 The tool performs the following:
 - Identifies and validates primer sequences using Smith-Waterman alignment
 - Handles potential sequencing errors with configurable mismatch tolerance
-- Processes polyA tails and UMIs
+- Processes polyA tails and polyT tails in reverse oriented reads
 - Splits concatenated reads into individual segments
 - Provides detailed statistics about the processing
 
@@ -62,7 +62,6 @@ split-fastqcats primer_pair_split \
     --stats-output stats.csv \
     -fp AAGCAGTGGTATCAACGCAGAGTGAAT \
     -rp GTACTCTGCGTTGATACCACTGCTT \ ## Note primer input orientation
-    --smith-waterman 4 \
     --error 0.3 \
     --chunk-size 1000 \
     --num_workers 4 \
@@ -76,8 +75,8 @@ split-fastqcats barcode_split \
     --lowqual-output lowqual.fastq.gz \
     --bin-output bin.fastq.gz \
     --stats-output stats.csv \
-    -fp AAGCAGTGGT \
-    --error 4 \
+    -fp AAGCAGTGGTATCAACGCAGAGT \
+    --error 3 \
     --chunk-size 1000 \
     --num_workers 4 \
     -v
@@ -265,7 +264,7 @@ The primer pair matching de-concatenating tool used to identify full-length mRNA
 - Minimum sequence length 300, Max length 50,000 bp
 - Checking for polyA tails at the ends of the sequences
 
-The barcode matching de-concatenating tools uses:
+The barcode matching de-concatenating tool uses:
 - Index validation with 80% minimum match score (using default parameters)
 - Position validation for index sequences - i.e. they should flank the primers
 
