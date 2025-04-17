@@ -344,9 +344,9 @@ class FastqSplitter:
                 
                 correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 50000
                 umi_seq = True
-                polyT = regex.findall("(TTTTTTTT){e<=0}", str(match['trimmed_seq'])[:150])
+                polyT = regex.findall("(TTTTTTTTTT){e<=0}", str(match['trimmed_seq'])[:150])
                 #polyT = False
-                polyA = regex.findall("(AAAAAAAA){e<=0}", str(match['trimmed_seq'])[-200:])
+                polyA = regex.findall("(AAAAAAAAAA){e<=0}", str(match['trimmed_seq'])[-200:])
                 valid = match['valid']
                 classification = "full_length" if umi_seq and polyA and not polyT and valid and correct_length else "lowqual"
     
@@ -389,7 +389,7 @@ class FastqSplitter:
         return result
         
 
-    def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int, verbose: bool):
+    def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int):
         """
         Split FastQ reads based on primer pairs and indexes.
         
@@ -582,8 +582,7 @@ def main():
         args.bin_output,
         args.stats_output,
         args.num_workers,
-        args.chunk_size,
-        args.verbose
+        args.chunk_size       
     )
     
     # Calculate and print the total time taken

@@ -64,9 +64,8 @@ class TestFastqSplitter(unittest.TestCase):
             self.bin_output,
             self.stats_output,
             self.num_workers,
-            self.chunk_size,
-            self.verbose
-        )
+            self.chunk_size
+           )
         
         # Check that output files were created
         self.assertTrue(os.path.exists(self.processed_output))

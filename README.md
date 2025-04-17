@@ -202,8 +202,7 @@ splitter.parallel_split_reads(
     bin_output="bin.fastq.gz",
     stats_output="stats.csv",
     num_workers=4,
-    chunk_size=1000,
-    verbose=True
+    chunk_size=1000
 )
 
 # To de-concatenate and de-multiplex by barcodes
