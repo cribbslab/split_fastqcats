@@ -12,6 +12,6 @@ dependencies:
   - pandas
   - pytest
   - pip
-  - parasail  # Only available on Linux (bioconda)
+  - parasail-python  # Only available on Linux (bioconda)
   - pip:
       - -e .
