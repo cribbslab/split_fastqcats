@@ -34,7 +34,7 @@ class TestFastqSplitter(unittest.TestCase):
             SeqIO.write([record], handle, "fastq")
             
         # Initialize FastqSplitter
-        self.forward_primer = "AAGCAGTGGTATCAACGCAGAGTGGG"
+        self.forward_primer = "AAGCAGTGGTATCAACGCAGAGTGAAT"
         self.reverse_primer = "GTACTCTGCGTTGATACCACTGCTT"
         self.error = 0.3
         self.num_workers = 4
