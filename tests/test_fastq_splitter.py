@@ -59,29 +59,3 @@ def test_find_best_primer_pairs(example_splitter):
     assert len(pairs) > 0, "Should find at least one primer pair"
     assert 'trimmed_seq' in pairs[0], "Each pair should include 'trimmed_seq' key"
 
-# Integration/file-based tests for split_reads should be implemented separately with proper fixtures or temp files.
-# def test_split_reads(example_splitter):
-#     """Test full read splitting functionality"""
-#     # Example placeholder: implement with temp files and real data if needed
-#     pass
-            self.lowqual_output,
-            self.bin_output,
-            self.stats_output
-        )
-        
-        # Check that output files were created
-        self.assertTrue(os.path.exists(self.processed_output))
-        self.assertTrue(os.path.exists(self.lowqual_output))
-        self.assertTrue(os.path.exists(self.bin_output))
-        self.assertTrue(os.path.exists(self.stats_output))
-
-    def tearDown(self):
-        # Clean up temporary files
-        for file in [self.input_fastq, self.processed_output, self.lowqual_output, 
-                    self.bin_output, self.stats_output]:
-            if os.path.exists(file):
-                os.remove(file)
-        os.rmdir(self.temp_dir)
-
-if __name__ == '__main__':
-    unittest.main()
