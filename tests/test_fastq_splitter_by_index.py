@@ -45,8 +45,8 @@ def test_multiple_matches(example_splitter):
     index = 'AAATTTGGGCCC'
     primer = 'AAGCAGTGGTATCAACGCAGAGT'[:10]
     pattern = index + primer
-    # Place the two patterns at least 100 bases apart
-    seq = pattern + 'A' * 100 + pattern + "A" * (100 - len(pattern + 'A' * 100 + pattern))
+    # Place the two patterns at least 200 bases apart
+    seq = pattern + 'A' * 200 + pattern + "A" * (100 - len(pattern + 'A' * 200 + pattern))
     matches = example_splitter.smith_waterman_search(seq, "read4")
     assert len(matches) >= 2, "Should find two matches"
 
