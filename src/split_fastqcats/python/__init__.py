@@ -4,9 +4,10 @@ Helper utilities for split_fastqcats pipelines
 
 """
 
-__version__ = '0.0.1'
+from ..version import __version__
 
-from .fastq_splitter_fuzzy import FastqSplitter as PrimerSplitter
-from .fastq_splitter_index_fuzzy import FastqSplitter as IndexSplitter
+
+from .fastq_splitter_by_primer import FastqSplitter as PrimerSplitter
+from .fastq_splitter_by_index import FastqSplitter as IndexSplitter
 
 __all__ = ['PrimerSplitter', 'IndexSplitter']

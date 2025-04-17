@@ -22,326 +22,18 @@ class FastqSplitter:
         
         self.forward_primer = forward_primer[:10]
         self.index_dict = index_dict
-        self.aligner = Align.PairwiseAligner()
-        self._setup_aligner()
         self.max_mismatches = mismatches
         self.patterns = [self.index_dict[key] + self.forward_primer for key in self.index_dict]
-        
-    def _setup_aligner(self):
         """Configure the Smith-Waterman aligner with scoring parameters."""
-        #Biopython PairwiseAligner arguments
-        self.aligner.mode = 'local'
-        self.aligner.match_score = 2
-        self.aligner.mismatch_score = -1
-        self.aligner.open_gap_score = -1
-        self.aligner.extend_gap_score = -1
         #Parasail arguments
         self.match_score = 2
         self.mismatch_score = -1
         self.open_gap_score = 1
         self.extend_gap_score = 1
-    #original single step sliding window Biopython aligner - very slow 2 reads/sec
-    def smith_waterman_search(self, sequence: str, record_id: str, errors: Union[int, float] = 0.1) -> List[dict]:
-        """
-        Perform Smith-Waterman local alignment to find the best pattern (index + primer) match in the sequence.
-        
-        Args:
-            sequence: The input DNA sequence.
-            record_id: The identifier of the read.
-            errors: If float (0 < errors < 1), it's used as a similarity threshold factor. 
-                    If integer, it's used as the max mismatches allowed.
-            
-        Returns:
-            A sorted list of match dictionaries with alignment info.
-        """
-        #log_message(f"Performing Smith-Waterman search for Read={record_id} with primer={self.forward_primer} and barcodes {list(self.index_dict.values())}", logging.DEBUG)
-
-        best_matches = []
-        
-        
-        for pattern in self.patterns:
-            pattern_length = len(pattern)
     
-            # If `errors` is a float (0 < errors < 1), it's treated as a similarity threshold factor
-            # Determine min_score_threshold
-            errors = self.max_mismatches  # Use the user-supplied value from __init__
-            if isinstance(errors, float) and 0 < errors < 1:
-                min_score_threshold = (1 - errors) * pattern_length * self.aligner.match_score
-                max_mismatches = pattern_length  # No strict mismatch limit
-            else:  # Treat `errors` as an integer for the maximum mismatches
-                errors = round(errors)  # Round the float to an integer
-                min_score_threshold = (pattern_length - errors) * self.aligner.match_score
-                max_mismatches = errors
-    
-            for i in range(len(sequence) - pattern_length + 1):
-                sub_seq = sequence[i:i + pattern_length]
-                alignments = self.aligner.align(sub_seq, pattern)
-    
-                if alignments:
-                    best_alignment = alignments[0]
-                    score = best_alignment.score
-    
-                    if score >= min_score_threshold:
-                        mismatches = sum(1 for a, b in zip(sub_seq, pattern) if a != b)
-                        #log_message(f"Record={record_id}, Pattern={pattern}, Start={i}, Mismatches={mismatches}, Score={best_alignment.score}", logging.DEBUG)
-
-    
-                        if mismatches <= max_mismatches:
-                            best_matches.append({
-                                'start': i,
-                                'end': i + pattern_length,
-                                'score': score,
-                                'min_score_threshold': min_score_threshold,
-                                'mismatches': mismatches,
-                                'sequence': sub_seq,
-                                'pattern': pattern,
-                                'record_id': record_id
-                            })
-    
-        # Sort by best match criteria (earliest start position, highest score, earliest start position)
-        sorted_matches = sorted(best_matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
-        
-        filtered_matches = []  # List to hold the non-overlapping, filtered matches
-        
-        for match_data in sorted_matches:
-            # Extract match start and end positions
-            start, end = match_data['start'], match_data['end']
-            
-            # If the filtered list is empty or there's no overlap, just add the match
-            if not filtered_matches:
-                filtered_matches.append(match_data)
-            else:
-                # Check overlap with the last added match in filtered_matches
-                last_match_data = filtered_matches[-1]
-                last_start, last_end = last_match_data['start'], last_match_data['end']
-                
-                # If there is an overlap (last match ends after the current match starts)
-                if last_end >= start:
-                    # Compare the current match with the last one based on score and mismatches
-                    if (match_data['score'], -match_data['mismatches']) > (last_match_data['score'], -last_match_data['mismatches']):
-                        # If current match is better, replace the last match
-                        filtered_matches[-1] = (match_data)
-                else:
-                    # If no overlap, add the current match
-                    filtered_matches.append(match_data)
-                    
-        filtered_matches.sort(key=lambda x: x['start'])  # Sort by start position
-        sorted_matches = filtered_matches
-        log_message(f"Read={record_id} - found {len(sorted_matches)} primer hits", logging.DEBUG)     
-        
-        return sorted_matches
-
-    ##Biopython aligner with 100bp windows and 50bp overlapping step - fast 8 reads per sec
-    def smith_waterman_search2(self, sequence: str, record_id: str, errors: Union[int, float] = 0.1) -> List[dict]:
-        """
-        Perform Smith-Waterman local alignment to find the best pattern (index + primer) match in the sequence.
-        
-        Args:
-            sequence: The input DNA sequence.
-            record_id: The identifier of the read.
-            errors: If float (0 < errors < 1), it's used as a similarity threshold factor. 
-                    If integer, it's used as the max mismatches allowed.
-            
-        Returns:
-            A sorted list of match dictionaries with alignment info.
-        """
-        #log_message(f"Performing Smith-Waterman search for Read={record_id} with primer={self.forward_primer} and barcodes {list(self.index_dict.values())}", logging.DEBUG)
-
-        best_matches = []
-        
-        
-        for pattern in self.patterns:
-            pattern_length = len(pattern)
-    
-            # If `errors` is a float (0 < errors < 1), it's treated as a similarity threshold factor
-            # Determine min_score_threshold
-            errors = self.max_mismatches  # Use the user-supplied value from __init__
-            if isinstance(errors, float) and 0 < errors < 1:
-                min_score_threshold = (1 - errors) * pattern_length * self.aligner.match_score
-                max_mismatches = pattern_length  # No strict mismatch limit
-            else:  # Treat `errors` as an integer for the maximum mismatches
-                errors = round(errors)  # Round the float to an integer
-                min_score_threshold = (pattern_length - errors) * self.aligner.match_score
-                max_mismatches = errors
-                
-            # set winow size for sliding search
-            window_size = 100
-            step_size = 50
-            
-            for i in range(0, len(sequence) - pattern_length + 1, step_size):
-                sub_seq = sequence[i:min(i + window_size, len(sequence))]
-                alignments = self.aligner.align(sub_seq, pattern)
-                
-                if not alignments:
-                    continue
-                  
-                filtered_alignments = [alignment for alignment in alignments if alignment.score >= min_score_threshold]   
-                
-                if not filtered_alignments:
-                    continue
-                    
-                
-                if filtered_alignments:
-                    best_alignment = filtered_alignments[0]
-                    score = best_alignment.score
-    
-                    if score >= min_score_threshold:
-                      
-                        start_pos = best_alignment.coordinates[0][0] + i
-                        end_pos = min(len(sequence), start_pos+pattern_length)
-                        target = sequence[start_pos:end_pos]
-                        query = pattern[0:len(target)]
-                        mismatches = sum(1 for a, b in zip(target, query) if a != b)
-                        #log_message(f"Record={record_id}, Pattern={pattern}, Start={i}, Mismatches={mismatches}, Score={best_alignment.score}", logging.DEBUG)
-
-    
-                        if mismatches <= max_mismatches:
-                            best_matches.append({
-                                'start': start_pos,
-                                'end': end_pos,
-                                'score': score,
-                                'min_score_threshold': min_score_threshold,
-                                'mismatches': mismatches,
-                                'sequence': target,
-                                'pattern': pattern,
-                                'record_id': record_id
-                            })
-    
-        # Sort by best match criteria (earliest start position, highest score, earliest start position)
-        sorted_matches = sorted(best_matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
-        
-        filtered_matches = []  # List to hold the non-overlapping, filtered matches
-        
-        for match_data in sorted_matches:
-            # Extract match start and end positions
-            start, end = match_data['start'], match_data['end']
-            
-            # If the filtered list is empty or there's no overlap, just add the match
-            if not filtered_matches:
-                filtered_matches.append(match_data)
-            else:
-                # Check overlap with the last added match in filtered_matches
-                last_match_data = filtered_matches[-1]
-                last_start, last_end = last_match_data['start'], last_match_data['end']
-                
-                # If there is an overlap (last match ends after the current match starts)
-                if last_end >= start:
-                    # Compare the current match with the last one based on score and mismatches
-                    if (match_data['score'], -match_data['mismatches']) > (last_match_data['score'], -last_match_data['mismatches']):
-                        # If current match is better, replace the last match
-                        filtered_matches[-1] = (match_data)
-                else:
-                    # If no overlap, add the current match
-                    filtered_matches.append(match_data)
-                    
-        filtered_matches.sort(key=lambda x: x['start'])  # Sort by start position
-        sorted_matches = filtered_matches
-        log_message(f"Read={record_id} - found {len(sorted_matches)} primer hits", logging.DEBUG)     
-        
-        return sorted_matches
-
-    #Biopython aligner without windows - simply take all alignments across full sequence - fast 120 reads per sec
-    def smith_waterman_search3(self, sequence: str, record_id: str, errors: Union[int, float] = 0.1) -> List[dict]:
-        """
-        Perform Smith-Waterman local alignment to find the best pattern (index + primer) match in the sequence.
-        
-        Args:
-            sequence: The input DNA sequence.
-            record_id: The identifier of the read.
-            errors: If float (0 < errors < 1), it's used as a similarity threshold factor. 
-                    If integer, it's used as the max mismatches allowed.
-            
-        Returns:
-            A sorted list of match dictionaries with alignment info.
-        """
-        #log_message(f"Performing Smith-Waterman search for Read={record_id} with primer={self.forward_primer} and barcodes {list(self.index_dict.values())}", logging.DEBUG)
-
-        best_matches = []
-        
-        
-        for pattern in self.patterns:
-            pattern_length = len(pattern)
-    
-            # If `errors` is a float (0 < errors < 1), it's treated as a similarity threshold factor
-            # Determine min_score_threshold
-            errors = self.max_mismatches  # Use the user-supplied value from __init__
-            if isinstance(errors, float) and 0 < errors < 1:
-                min_score_threshold = (1 - errors) * pattern_length * self.aligner.match_score
-                max_mismatches = pattern_length  # No strict mismatch limit
-            else:  # Treat `errors` as an integer for the maximum mismatches
-                errors = round(errors)  # Round the float to an integer
-                min_score_threshold = (pattern_length - errors) * self.aligner.match_score
-                max_mismatches = errors
-                
-           
-            ## Check full sequence for all alignemnts    
-            alignments = self.aligner.align(sequence, pattern)
-            
-            if not alignments:
-                continue
-              
-            filtered_alignments = [alignment for alignment in alignments if alignment.score >= min_score_threshold]   
-            
-            if not filtered_alignments:
-                continue
-                
-            for alignment in filtered_alignments:
-                
-                start_pos = alignment.coordinates[0][0]
-                end_pos = min(len(sequence), start_pos+pattern_length)
-                target = sequence[start_pos:end_pos]
-                query = pattern[0:len(target)]
-                score = alignment.score
-                mismatches = sum(1 for a, b in zip(target, query) if a != b)
-            
-                if mismatches <= max_mismatches:
-            
-                    best_matches.append({
-                        'start': start_pos,
-                        'end': end_pos,
-                        'score': score,
-                        'min_score_threshold': min_score_threshold,
-                        'mismatches': mismatches,
-                        'sequence': target,
-                        'pattern': pattern,
-                        'record_id': record_id
-                    })
-    
-        # Sort by best match criteria (earliest start position, highest score, earliest start position)
-        sorted_matches = sorted(best_matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
-        
-        filtered_matches = []  # List to hold the non-overlapping, filtered matches
-        
-        for match_data in sorted_matches:
-            # Extract match start and end positions
-            start, end = match_data['start'], match_data['end']
-            
-            # If the filtered list is empty or there's no overlap, just add the match
-            if not filtered_matches:
-                filtered_matches.append(match_data)
-            else:
-                # Check overlap with the last added match in filtered_matches
-                last_match_data = filtered_matches[-1]
-                last_start, last_end = last_match_data['start'], last_match_data['end']
-                
-                # If there is an overlap (last match ends after the current match starts)
-                if last_end >= start:
-                    # Compare the current match with the last one based on score and mismatches
-                    if (match_data['score'], -match_data['mismatches']) > (last_match_data['score'], -last_match_data['mismatches']):
-                        # If current match is better, replace the last match
-                        filtered_matches[-1] = (match_data)
-                else:
-                    # If no overlap, add the current match
-                    filtered_matches.append(match_data)
-                    
-        filtered_matches.sort(key=lambda x: x['start'])  # Sort by start position
-        sorted_matches = filtered_matches
-        log_message(f"Read={record_id} - found {len(sorted_matches)} primer hits", logging.DEBUG)     
-        
-        return sorted_matches
 
     #Parasail aligner tool with 100bp window and 50bp overlapping step - very fast -- 280 reads/sec
-    def smith_waterman_search4(self, sequence: str, record_id: str, errors: Union[int, float] = None) -> List[dict]:
+    def smith_waterman_search(self, sequence: str, record_id: str, errors: Union[int, float] = None) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find the best pattern (index + primer) match in the sequence.
 
@@ -419,23 +111,24 @@ class FastqSplitter:
                     aligned_pattern = alignment.traceback.ref
                     
                     # Count mismatches and gaps
-                    mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
-                    gaps = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q == '-' or p == '-')
+                    #counts mismatches and gaps together
                     mismatches = sum(1 for a, b in zip(aligned_query, aligned_pattern) if a != b)
+                    
+                    #counts mismatch and gaps separately
+                    #mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
                     gaps = aligned_query.count('-') + aligned_pattern.count('-')
-                    gaps = 0
-                    if mismatches + gaps <= max_mismatches:
+                    
+                    if mismatches <= max_mismatches:
                         #print(f"DEBUG: Record={record_id}, Pattern={pattern}, Start={start_position}, Mismatches={mismatches}, Score={alignment.score}")
                         log_message(f"Record={record_id}, Pattern={pattern}, Start={start_position+start}, Mismatches={mismatches}, Score={alignment.score}", logging.DEBUG)
     
                         best_matches.append({
                             'start': start_position,
-                            #'end': start+alignment.end_query,
                             'end': end_position,
                             'score': alignment.score,
                             'pattern': pattern,
                             'mismatches': mismatches,
-                            'gaps': gaps,
+                            #'gaps': gaps, #uncomment if want to count gaps + mismatches separately
                             'record_id': record_id,
                             'min_score_threshold': min_score_threshold
                         })
@@ -449,6 +142,7 @@ class FastqSplitter:
             # Extract match start and end positions
             start, end = match_data['start'], match_data['end']
             
+            # Sort by best match (highest score, lowest mismatches, then lowest start position)
             # If the filtered list is empty or there's no overlap, just add the match
             if not filtered_matches:
                 filtered_matches.append(match_data)
@@ -470,16 +164,7 @@ class FastqSplitter:
         filtered_matches.sort(key=lambda x: x['start'])  # Sort by start position
         sorted_matches = filtered_matches
         log_message(f"Read={record_id} - found {len(sorted_matches)} primer hits", logging.DEBUG) 
-        
-        
-        # # Log results for debugging
-        # if sorted_matches:
-        #     print(f"Read Name: {record_id}")
-        #     for match in sorted_matches:
-        #         print(f"WARNING Pattern: {match['pattern']}, Start Position: {match['start']}, Mismatches: {match['mismatches']}, Score: {match['score']}, Score threshold: {min_score_threshold}")
-        # 
-
-        # Sort by best match (highest score, lowest mismatches, then lowest start position)
+      
         return sorted_matches
 
 
@@ -492,7 +177,7 @@ class FastqSplitter:
             seq = str(record.seq)
             read_name = record.id  # Get read name
             log_message(f"Processing read {read_name}", logging.DEBUG)
-            matches = self.smith_waterman_search4(seq, read_name, self.max_mismatches)  # Pass read name
+            matches = self.smith_waterman_search(seq, read_name, self.max_mismatches)  # Pass read name
     
             if not matches:
                  # If no matches are found, classify as binned, but always return the record.
@@ -581,7 +266,6 @@ class FastqSplitter:
             stats['total_reads'] = total_records
     
             # Split records into chunks
-            #chunk_size = len(records) // num_workers
             chunks = [records[i:i + chunk_size] for i in range(0, len(records), chunk_size)]
             num_workers = min(num_workers, len(chunks))
     
@@ -605,12 +289,7 @@ class FastqSplitter:
                         pbar.update(len(records_chunk))  # Update progress by the size of the chunk
 
     
-                    # for result in pool.imap(self.worker, args):
-                    #     # Flatten the results from the worker
-                    #     results.extend(result)
-                    #     pbar.update(len(result))  # Update progress bar after processing each chunk
-    
-                    #all_results = results
+                  
                     stats['total_segments'] = len(results)
                     
                      # Debug print: After all chunks are processed

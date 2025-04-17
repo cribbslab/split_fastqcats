@@ -102,12 +102,12 @@ def separate_by_index(infile, outfile):
     results_dir = os.path.join("separate_samples.dir", name)
     barcodes = " ".join(INDEXES)
     statement = '''mkdir -p %(results_dir)s &&
-                   python %(PYTHON_ROOT)s/fastq_splitter_index_fuzzy.py -e %(error)s --num_workers 4 \
+                   python %(PYTHON_ROOT)s/fastq_splitter_by_index.py -e %(error)s --num_workers 4 \
                    --processed-output %(name)s.processed \
                    --lowqual-output %(name)s.lowqual.fastq.gz \
                    --bin-output %(name)s.binned.fastq.gz \
                    --stats-output %(name)s.stats.csv \
-                   -res %(results_dir)s -i %(infile)s -fp %(FP)s --indexes %(barcodes)s -v'''
+                   -res %(results_dir)s -i %(infile)s -fp %(FP)s --indexes %(barcodes)s'''
     P.run(statement, job_options='-t 03:00:00', job_memory="20G", job_threads=4, without_cluster = False)
 
 @follows(separate_by_index)
