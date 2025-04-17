@@ -5,7 +5,7 @@ from Bio.SeqRecord import SeqRecord
 import tempfile
 import gzip
 import os
-from split_fastqcats import FastqSplitter
+from split_fastqcats import PrimerSplitter as FastqSplitter
 
 class TestFastqSplitter(unittest.TestCase):
     def setUp(self):
@@ -18,8 +18,8 @@ class TestFastqSplitter(unittest.TestCase):
         self.stats_output = os.path.join(self.temp_dir, "stats.csv")
         
         # Test sequence with known structure
-        self.test_seq = "AAGCAGTGGTATCAACGCAGAGTGAATCGTACGTACGTACGTACGTTTTTTTTTTTTCACTCTGCGTTGATACCACTGCTT"
-        self.test_qual = [40] * len(self.test_seq)  # Dummy quality scores
+        self.test_seq = "AAGCAGTGGTATCAACGCAGAGTGAATGGGCGTACGTACGTACGTACGTTTTTTTTTTTTCGTACTCTGCGTTGATACCACTGCTT"
+        self.test_qual = [45] * len(self.test_seq)  # Dummy quality scores
         
         # Create test FASTQ file
         record = SeqRecord(
@@ -33,10 +33,11 @@ class TestFastqSplitter(unittest.TestCase):
             SeqIO.write([record], handle, "fastq")
             
         # Initialize FastqSplitter
-        self.forward_primer = "AAGCAGTGGTATCAACGCAGAGT"
-        self.reverse_primer = "ACTCTGCGTTGATACCACTGCTT"
-        self.index_dict = {'1': ['AAATTTGGGCCC', 'GGGCCCAAATTT']}
-        self.splitter = FastqSplitter(self.forward_primer, self.reverse_primer, self.index_dict)
+        self.forward_primer = "AAGCAGTGGTATCAACGCAGAGTGGG"
+        self.reverse_primer = "GTACTCTGCGTTGATACCACTGCTT"
+        self.error = 0.3
+        self.index_dict = {'1': ['AAATTTGGGCCC', 'GGGCCCAAATTT']} # not used for PrimerSplitter
+        self.splitter = FastqSplitter(self.forward_primer, self.reverse_primer, self.error)
 
     def test_smith_waterman_search(self):
         """Test Smith-Waterman search function"""
@@ -52,7 +53,7 @@ class TestFastqSplitter(unittest.TestCase):
 
     def test_split_reads(self):
         """Test full read splitting functionality"""
-        self.splitter.split_reads(
+        self.splitter.parallel_split_reads(
             self.input_fastq,
             self.processed_output,
             self.lowqual_output,
