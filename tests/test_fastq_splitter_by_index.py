@@ -20,7 +20,7 @@ def make_seqrecord(seq, name="test", qual=40):
 def test_smith_waterman_search_exact(example_splitter):
     index = 'AAATTTGGGCCC'
     primer = 'AAGCAGTGGTATCAACGCAGAGT'[:10]
-    seq = index + primer
+    seq = index + primer + "A" * (100 - len(index + primer))
     matches = example_splitter.smith_waterman_search(seq, "read1")
     assert matches, "Should find a match for exact barcode+primer"
     assert matches[0]["start"] == 0 or matches[0]["start"] is not None
@@ -30,7 +30,7 @@ def test_smith_waterman_search_with_mismatch(example_splitter):
     index = 'AAATTTGGGCCC'
     primer = 'AAGCAGTGGTATCAACGCAGAGT'[:10]
     # Introduce a single mismatch in the index region
-    seq = 'AAATTTGGGACC' + primer  # C->A mutation at position 10
+    seq = 'AAATTTGGGACC' + primer + "A" * (100 - len(index + primer))  # C->A mutation at position 10
     matches = example_splitter.smith_waterman_search(seq, "read2")
     assert matches, "Should tolerate one mismatch"
     assert matches[0]["start"] == 0 or matches[0]["start"] is not None
@@ -45,7 +45,7 @@ def test_multiple_matches(example_splitter):
     index = 'AAATTTGGGCCC'
     primer = 'AAGCAGTGGTATCAACGCAGAGT'[:10]
     pattern = index + primer
-    seq = pattern + 'NNNNN' + pattern
+    seq = pattern + 'N' * 5 + pattern + "A" * (100 - len(pattern + 'N' * 5 + pattern))
     matches = example_splitter.smith_waterman_search(seq, "read4")
     assert len(matches) >= 2, "Should find two matches"
 

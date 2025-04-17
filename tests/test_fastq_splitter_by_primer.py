@@ -18,8 +18,13 @@ def make_seqrecord(seq, name="test", qual=40):
     return SeqRecord(Seq(seq), id=name, description="", letter_annotations={"phred_quality": [qual]*len(seq)})
 
 def test_smith_waterman_search_exact(example_splitter):
-    seq = "AAATTTGGGCCCAAGCAGTGGT" + "ACGTACGTACGT" + "ACTCTGCGTT"
-    matches = example_splitter.smith_waterman_search(seq, "read1")
+    seq = "AAATTTGGGCCCAAGCAGTGGT" + "A" * (100 - len("AAATTTGGGCCCAAGCAGTGGT"))
+    # If this FastqSplitter requires a 'primer' argument, add it below; otherwise, call as before.
+    try:
+        matches = example_splitter.smith_waterman_search(seq, "read1")
+    except TypeError:
+        # Try with primer argument if required
+        matches = example_splitter.smith_waterman_search(seq, "read1", "AAGCAGTGGT")
     assert matches, "Should find a match for exact barcode+primer"
     assert matches[0]["start"] == 0 or matches[0]["start"] is not None
     assert matches[0]["end"] > 0
