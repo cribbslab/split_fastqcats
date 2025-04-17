@@ -36,6 +36,9 @@ class TestFastqSplitter(unittest.TestCase):
         self.forward_primer = "AAGCAGTGGTATCAACGCAGAGTGGG"
         self.reverse_primer = "GTACTCTGCGTTGATACCACTGCTT"
         self.error = 0.3
+        self.num_workers = 4
+        self.chunk_size = 1000
+        self.verbose = True
         self.index_dict = {'1': ['AAATTTGGGCCC', 'GGGCCCAAATTT']} # not used for PrimerSplitter
         self.splitter = FastqSplitter(self.forward_primer, self.reverse_primer, self.error)
 
@@ -58,7 +61,10 @@ class TestFastqSplitter(unittest.TestCase):
             self.processed_output,
             self.lowqual_output,
             self.bin_output,
-            self.stats_output
+            self.stats_output,
+            self.num_workers,
+            self.chunk_size,
+            self.verbose
         )
         
         # Check that output files were created
