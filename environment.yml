@@ -1,0 +1,17 @@
+name: split_fastqcats
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10  # Will be overridden by the matrix in CI
+  - biopython
+  - regex
+  - tqdm
+  - cgatcore
+  - ruffus
+  - pandas
+  - pytest
+  - pip
+  - parasail  # Only available on Linux (bioconda)
+  - pip:
+      - -e .

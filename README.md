@@ -51,13 +51,18 @@ cd split_fastqcats
 pip install -e .
 ```
 
-### Using conda/mamba
+### Using conda/mamba (Linux)
+
+> **Note:** `parasail` is only available on Linux via bioconda. The environment will not resolve on macOS ARM (Apple Silicon).
 
 ```bash
-mamba env create -f conda/environments/split_fastqcats.yml
-conda activate fastcats
+mamba env create -f environment.yml
+conda activate split_fastqcats
 pip install -e .
 ```
+
+#### Troubleshooting for Apple Silicon/macOS users
+- `parasail` cannot be installed natively on macOS ARM. For development or testing on Apple Silicon, use the provided test mocks, or run in a Linux Docker container.
 
 ## Usage
 
