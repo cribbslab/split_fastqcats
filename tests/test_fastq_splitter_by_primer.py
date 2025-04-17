@@ -24,6 +24,7 @@ def test_smith_waterman_search_exact(example_splitter):
         matches = example_splitter.smith_waterman_search(seq, "read1")
     except TypeError:
         # Try with primer argument if required
+        matches = example_splitter.smith_waterman_search(seq, "read1", "AAGCAGTGGT")
     assert matches, "Should find a match for exact barcode+primer"
     assert matches[0]["start"] == 0 or matches[0]["start"] is not None
     assert matches[0]["end"] > 0
