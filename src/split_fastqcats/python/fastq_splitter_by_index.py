@@ -67,7 +67,7 @@ class FastqSplitter:
         window_size = 100
         step_size = 50
         
-        for start in range(0, len(sequence) - window_size + 1, step_size):
+        for start in range(0, len(sequence) - pattern_length + 1, step_size):
             window = sequence[start:min(start + window_size, len(sequence))]  # Extract window
     
     
