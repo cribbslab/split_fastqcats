@@ -131,7 +131,7 @@ split-fastqcats barcode_split \
 - `--num_workers`: Number of parallel workers (default: `4`)
 - `-v, --verbose`: Enable detailed logging
 
-# Note: The -e argument can be given as a float between 0 to 1, indicating the fraction of bases that can mismatch (rounded down), or as an integer indicating an absolute mismatch threshold. E.g. "3" indicates a maximum of 3 matches allowed. "0.3" indicates for a 25bp pattern, 0.3 *  25 = 7.5 --> therefore 7 mismatches allowed.   
+- **Note:** The -e argument can be given as a float between 0 to 1, indicating the fraction of bases that can mismatch (rounded down), or as an integer indicating an absolute mismatch threshold. E.g. "3" indicates a maximum of 3 matches allowed. "0.3" indicates for a 25bp pattern, 0.3 *  25 = 7.5 --> therefore 7 mismatches allowed.   
 ---
 
 ## Outputs
