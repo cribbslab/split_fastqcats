@@ -3,70 +3,66 @@
 Pipeline fl_rna
 ===========================
 
-Overview
-========
+Full-Length RNA (fl_rna) Pipeline for split_fastqcats
+-----------------------------------------------------
 
-The aim of this pipeline is to take a nanopore input fastq and then process
-the file so that it splits the files out into individual fastq files based
-on the barcode sequences. It will then identify full length reads based on
-appropriate read segments flanked by primers in the correct orientation and
-containing polyA tails. Reads with reverse orientation are re-oriented by 
-reverse complementation. Concatenated reads, identified as those with more
-than two primer hits, are de-concatenated and re-oriented.
- 
+This pipeline is part of the split_fastqcats toolkit and is designed to process long-read (e.g., Nanopore) cDNA FastQ files, specifically for workflows where full-length RNA sequencing is performed and multiple transcript copies may be concatenated in a single read.
 
-Configuration
--------------
+**Key Features:**
+- Splits raw FastQ files into individual reads based on barcode and primer sequences.
+- Identifies full-length reads by detecting segments flanked by expected primers in correct orientation, with polyA tail validation.
+- Automatically re-orients reads with reverse orientation.
+- De-concatenates reads containing multiple transcript copies (multiple primer pairs in a single read).
+- Merges and summarizes results across samples, providing detailed QC statistics.
+- Supports high-throughput batch processing for both local and cluster environments.
 
-The pipeline requires a configured :file:`pipeline.yml` file.
-CGATReport report requires a :file:`conf.py` and optionally a
-:file:`cgatreport.ini` file (see :ref:`PipelineReporting`).
+**Inputs:**
+- Nanopore (or similar) FastQ files with concatenated cDNA reads
+- User-customizable pipeline.yml configuration file
 
+**Outputs:**
+- Processed, low-quality, and binned FastQ files for each sample
+- Merged statistics and QC summaries
 
-To generate the default config file to change the running of the pipeline you need to
-run:
+**Usage:**
+1. Generate a config file:
+   ```bash
+   split-fastqcats fl_rna config
+   ```
+2. Edit `pipeline.yml` as needed
+3. Run the pipeline:
+   ```bash
+   split-fastqcats fl_rna make full -v5
+   # or locally
+   split-fastqcats fl_rna make full -v5 --local
+   ```
 
-split-fastqcats fl_rna config
-
-This will generate a pipeline.yml file that the user can modify to change the
-output of the pipeline.
-
-Usage
-=====
-
-See :ref:`PipelineSettingUp` and :ref:`PipelineRunning` on general
-information how to use CGAT pipelines.
-
-Once the user has modified the pipeline.yml file the
-pipeline can then be ran using the following commandline command:
-
-split-fastqcats fl_rna make full -v5
-
-You can run the pipeline locally (without a cluster) using --local
-
-split-fastqcats fl_rna make full -v5 --local
-
-Input files
------------
-
-fastq.gz file of nanopore reads that have been sequenced with 
-Macosko's TSO and Trimer RT primers. 
-The pipeline.yml can be customised to allow for other primer.
-Primers need to specified in the orientation expected in the sense
-strand/second strand of cDNA in forward orientation. See the 
-README.md for full orientation of reads expected
-
-Pipeline output
-===============
-
-Individual fastq files split based on the presence of the primer
-pairs in the correct order. Only de-concatenated reads between 
-300 to 50,000 bp are kept.
-
-Code
-====
-
+This pipeline leverages CGAT-style batch processing and is tightly integrated with the split_fastqcats core logic for robust, error-tolerant splitting and de-concatenation of long-read RNA data.
 """
+
+# ===================
+# Input files
+# ===================
+#
+# fastq.gz file of nanopore reads that have been sequenced with 
+# Macosko's TSO and Trimer RT primers. 
+# The pipeline.yml can be customised to allow for other primer.
+# Primers need to specified in the orientation expected in the sense
+# strand/second strand of cDNA in forward orientation. See the 
+# README.md for full orientation of reads expected
+#
+# ===================
+# Pipeline output
+# ===================
+#
+# Individual fastq files split based on the presence of the primer
+# pairs in the correct order. Only de-concatenated reads between 
+# 300 to 50,000 bp are kept.
+#
+# ===================
+# Code
+# ===================
+
 import sys
 import os
 import glob
@@ -134,7 +130,9 @@ def separate_by_primer_pairs(infile, outfile):
 
 def merge_by_sample(infile, outfile):
     '''
-    Merge binned, lowqual, and processed fastq files from separate_samples.dir.
+    Merge all binned, low-quality, and processed FastQ files for a given sample from separate_samples.dir
+    into consolidated files in merged_results.dir. This step ensures all read categories are available
+    for downstream analysis and reporting.
     '''
     name = os.path.basename(infile).replace('.fastq.gz', '')
     statement = '''cat separate_samples.dir/%(name)s.*/*.binned.fastq.gz > merged_results.dir/%(name)s.binned.fastq.gz &&
@@ -149,7 +147,8 @@ def merge_by_sample(infile, outfile):
            r"merged_results.dir/\1.merged_stats.csv")
 def merge_stats(infile, outfile):
     '''
-    Merge stats from all separate_samples.dir into a single CSV file.
+    Merge all statistics CSV files from separate_samples.dir into a single summary CSV file in merged_results.dir.
+    This provides a unified QC and processing summary for each sample.
     '''
     name = os.path.basename(infile).replace('.fastq.gz', '.stats.csv')
     PYTHON_ROOT = os.path.join(os.path.dirname(__file__), "python/")
@@ -158,6 +157,10 @@ def merge_stats(infile, outfile):
 
 @follows(merge_stats)
 def full():
+    '''
+    Dummy target for the pipeline. Ensures all steps (splitting, separating, merging, summarizing)
+    are executed in the correct order when running the full workflow.
+    '''
     pass
 
 def main(argv=None):
