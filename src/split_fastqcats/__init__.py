@@ -1,9 +1,11 @@
 """
-split_fastqcats - A tool for processing and splitting FastQ reads based on primer sequences
+split_fastqcats - A tool for processing and splitting FastQ reads based on primer sequences.
+
 """
 
-__version__ = '0.1.0'
+# split_fastqcats/__init__.py
+from .version import __version__
 
-from .fastq_splitter import FastqSplitter, main
+from .python import PrimerSplitter, IndexSplitter
 
-__all__ = ['FastqSplitter', 'main']
+__all__ = ['PrimerSplitter', 'IndexSplitter']

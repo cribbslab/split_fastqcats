@@ -27,7 +27,7 @@ from typing import Dict, List, Tuple, Optional
 from multiprocessing import Pool, cpu_count
 
 class FastqSplitter:
-    def __init__(self, forward_primer: str, reverse_primer: str, error: float, sw: int):
+    def __init__(self, forward_primer: str, reverse_primer: str, error: float):
         """
         Initialize the FastQ splitter with primers and index dictionary.
         
@@ -41,247 +41,18 @@ class FastqSplitter:
         self.forward_primer = forward_primer
         self.reverse_primer = reverse_primer
         self.error = error
-        self.sw_version = sw
-        self.aligner = Align.PairwiseAligner()
-        self._setup_aligner()
-
-    def _setup_aligner(self):
-        """Configure the Smith-Waterman aligner with scoring parameters."""
-        #Biopython PairwiseAligner arguments
-        self.aligner.mode = 'local'
-        self.aligner.match_score = 2
-        self.aligner.mismatch_score = -1
-        self.aligner.open_gap_score = -1
-        self.aligner.extend_gap_score = -0.5
+        
+        #"""Configure the Smith-Waterman aligner with scoring parameters."""
+        
         #Parasail arguments
         self.match_score = 2
         self.mismatch_score = -1
         self.open_gap_score = 1
         self.extend_gap_score = 1
     
-    #original single step sliding window Biopython aligner - very slow 10 reads/sec
-    def smith_waterman_search(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
-        """
-        Perform Smith-Waterman local alignment to find primer matches.
-        
-        Args:
-            sequence: Input DNA sequence
-            primer: Primer sequence to search for
-            error: Mismatch allowance (float value)
-            
-        Returns:
-            List of dictionaries containing match information
-        """
-        
-        log_message(f"Performing Smith-Waterman search for Read={read_name} with primer={primer}", logging.DEBUG)
-    
-        
-        matches = []
-        primer_length = len(primer)
-        
-        # Determine min_score_threshold
-        error = self.error
-        if error < 1:
-            min_score_threshold = (1 - error) * primer_length * self.aligner.match_score
-            max_mismatches = math.ceil(error * primer_length)
-        else:
-            min_score_threshold = (1 - (error / primer_length)) * primer_length * self.aligner.match_score
-            max_mismatches = int(error)  # Use error directly as max_mismatches
-        
-        ## uncomment below for testing puproses
-        #min_score_threshold = 0.65 * primer_length * self.aligner.match_score  
-        
-
-        # Also search for reverse complement
-        rev_comp_primer = str(Seq(primer).reverse_complement())
-        
-        for search_primer in [primer, rev_comp_primer]:
-            
-            for i in range(len(sequence) - primer_length + 1):
-                sub_seq = sequence[i:min(i + primer_length, len(sequence))]
-                alignments = self.aligner.align(sub_seq, search_primer)
-                
-                if not alignments:
-                    continue
-                    
-                alignment = alignments[0]
-                score = alignment.score
-                
-                if score >= min_score_threshold:
-                    #max_mismatches = 10 #for testing purposes
-                    mismatches = sum(1 for a, b in zip(sub_seq, search_primer) if a != b)
-               
-                    if mismatches <= max_mismatches:
-                      
-                        matches.append({
-                            'start': i,
-                            'end': i + primer_length,
-                            'primer': search_primer,
-                            'score': score,
-                            'mismatches': mismatches,
-                            'sequence': read_name,
-                            'is_reverse': search_primer == rev_comp_primer
-                        })
-                    
-        return sorted(matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
-
-    ##Biopython aligner with 100bp windows and 50bp overlapping step - fast 125 reads per sec
-    def smith_waterman_search2(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
-        """
-        Perform Smith-Waterman local alignment to find primer matches.
-        
-        Args:
-            sequence: Input DNA sequence
-            primer: Primer sequence to search for
-            error: Mismatch allowance (float value)
-            
-        Returns:
-            List of dictionaries containing match information
-        """
-        
-        log_message(f"Performing Smith-Waterman search for Read={read_name} with primer={primer}", logging.DEBUG)
-    
-        
-        matches = []
-        primer_length = len(primer)
-        
-        # Determine min_score_threshold
-        error = self.error
-        if error < 1:
-            min_score_threshold = (1 - error) * primer_length * self.aligner.match_score
-            max_mismatches = math.ceil(error * primer_length)
-        else:
-            min_score_threshold = (1 - (error / primer_length)) * primer_length * self.aligner.match_score
-            max_mismatches = int(error)  # Use error directly as max_mismatches
-        
-        ## uncomment below for testing puproses
-        #min_score_threshold = 0.65 * primer_length * self.aligner.match_score  
-        
-
-        # Also search for reverse complement
-        rev_comp_primer = str(Seq(primer).reverse_complement())
-        
-        for search_primer in [primer, rev_comp_primer]:
-            
-            
-            # set winow size for sliding search
-            window_size = 100
-            step_size = 50
-            
-            for i in range(0, len(sequence) - primer_length + 1, step_size):
-                sub_seq = sequence[i:min(i + window_size, len(sequence))]
-                alignments = self.aligner.align(sub_seq, search_primer)
-                
-                if not alignments:
-                    continue
-                  
-                filtered_alignments = [alignment for alignment in alignments if alignment.score >= min_score_threshold]   
-                
-                if not filtered_alignments:
-                    continue
-                    
-                alignment = filtered_alignments[0]
-                score = alignment.score
-                
-                start_pos = alignment.coordinates[0][0] + i
-                end_pos = min(len(sequence), start_pos+primer_length)
-                target = sequence[start_pos:end_pos]
-                query = search_primer[0:len(target)]
-                
-                if score >= min_score_threshold:
-                    #max_mismatches = 10 #for testing purposes
-                    mismatches = sum(1 for a, b in zip(target, query) if a != b)
-               
-                    if mismatches <= max_mismatches:
-                      
-                        matches.append({
-                            'start': start_pos,
-                            'end': end_pos,
-                            'primer': search_primer,
-                            'score': score,
-                            'mismatches': mismatches,
-                            'sequence': read_name,
-                            'is_reverse': search_primer == rev_comp_primer
-                        })
-                    
-        return sorted(matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
-
-    #Biopython aligner without windows - simply take all alignments across full sequence - fast 250 reads per sec
-    def smith_waterman_search3(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
-        """
-        Perform Smith-Waterman local alignment to find primer matches.
-        
-        Args:
-            sequence: Input DNA sequence
-            primer: Primer sequence to search for
-            error: Mismatch allowance (float value)
-            
-        Returns:
-            List of dictionaries containing match information
-        """
-        
-        log_message(f"Performing Smith-Waterman search for Read={read_name} with primer={primer}", logging.DEBUG)
-    
-        
-        matches = []
-        primer_length = len(primer)
-        
-        # Determine min_score_threshold
-        error = self.error
-        if error < 1:
-            min_score_threshold = (1 - error) * primer_length * self.aligner.match_score
-            max_mismatches = math.ceil(error * primer_length)
-        else:
-            min_score_threshold = (1 - (error / primer_length)) * primer_length * self.aligner.match_score
-            max_mismatches = int(error)  # Use error directly as max_mismatches
-        
-        ## uncomment below for testing puproses
-        #min_score_threshold = 0.65 * primer_length * self.aligner.match_score  
-        
-
-        # Also search for reverse complement
-        rev_comp_primer = str(Seq(primer).reverse_complement())
-        
-        for search_primer in [primer, rev_comp_primer]:
-        
-            alignments = self.aligner.align(sequence, search_primer)
-            
-            if not alignments:
-                #print("No alignment")
-                continue
-            
-            filtered_alignments = [alignment for alignment in alignments if alignment.score >= min_score_threshold]   
-            
-            if not filtered_alignments:
-                #print("No filtered alignment")
-                continue
-              
-            for alignment in filtered_alignments:
-                # Print the search primer (assume `search_primer` is defined elsewhere in the code)
-                #print(search_primer)
-                #print(alignment.target)
-                start_pos = alignment.coordinates[0][0]
-                end_pos = min(len(sequence), start_pos+primer_length)
-                target = sequence[start_pos:end_pos]
-                query = search_primer[0:len(target)]
-                mismatches = sum(1 for a, b in zip(target, query) if a != b)
-                if mismatches <= max_mismatches:
-                  
-                    matches.append({
-                        'start': start_pos,
-                        'end': end_pos,
-                        'primer': search_primer,
-                        'score': alignment.score,
-                        'mismatches': mismatches,
-                        'sequence': read_name,
-                        'is_reverse': search_primer == rev_comp_primer
-                    })
-             
-              
-        return sorted(matches, key=lambda x: (x['start'], -x['score'], x['mismatches']))
     
     #Parasail aligner tool with 100bp window and 50bp overlapping step - very fast -- 1000 reads/sec
-    def smith_waterman_search4(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
+    def smith_waterman_search(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
         
@@ -304,14 +75,13 @@ class FastqSplitter:
         # Determine min_score_threshold
         error = self.error
         if error < 1:
-            min_score_threshold = (1 - error) * primer_length * self.aligner.match_score
+            min_score_threshold = (1 - error) * primer_length * self.match_score
             max_mismatches = math.floor(error * primer_length)
         else:
-            min_score_threshold = (1 - (error / primer_length)) * primer_length * self.aligner.match_score
+            min_score_threshold = (1 - (error / primer_length)) * primer_length * self.match_score
             max_mismatches = int(error)  # Use error directly as max_mismatches
         
-        #min_score_threshold = 0.80 * primer_length * self.aligner.match_score  
-
+    
         # Also search for reverse complement
         rev_comp_primer = str(Seq(primer).reverse_complement())
         scoring_matrix = parasail.matrix_create("ACGT", self.match_score, self.mismatch_score)
@@ -361,11 +131,12 @@ class FastqSplitter:
                     aligned_pattern = alignment.traceback.ref
         
                     # Count mismatches and gaps
-                    #mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
-                    #gaps = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q == '-' or p == '-')
+                    
+                    #counts mismatches and gaps together
                     mismatches = sum(1 for a, b in zip(aligned_query, aligned_pattern) if a != b)
-                    #gaps = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q == '-' or p == '-')
-                    #mismatches = self.count_mismatches(aligned_query, aligned_pattern)
+                    
+                    #counts mismatch and gaps separately
+                    #mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
                     gaps = aligned_query.count('-') + aligned_pattern.count('-')
                     
         
@@ -376,7 +147,7 @@ class FastqSplitter:
                             'primer': search_primer,
                             'score': alignment.score,
                             'mismatches': mismatches,
-                            'gaps': gaps,
+                            #'gaps': gaps, #uncomment if want to count gaps + mismatches separately
                             'sequence': read_name,
                             'is_reverse': search_primer == rev_comp_primer
                         })
@@ -397,8 +168,8 @@ class FastqSplitter:
         """
         #log_message(f"Processing Read={read_name}")
         
-        forward_matches = self.smith_waterman_search4(sequence, read_name, self.forward_primer)
-        reverse_matches = self.smith_waterman_search4(sequence, read_name, self.reverse_primer)
+        forward_matches = self.smith_waterman_search(sequence, read_name, self.forward_primer)
+        reverse_matches = self.smith_waterman_search(sequence, read_name, self.reverse_primer)
         
         paired_sequences = []
         used_positions = set()  # Track used positions to avoid overlaps
@@ -456,7 +227,7 @@ class FastqSplitter:
             
             # Set minimum and maximum segment size to consider valid
             distance = pos2_end - pos1_start
-            passes_length_quality = 300 <= distance <= 5000
+            passes_length_quality = 50 <= distance <= 50000
             
              # Check if match1 and match2 form a valid primer pair
             valid_pair = False
@@ -540,10 +311,7 @@ class FastqSplitter:
     
                 paired_sequences.append(last_segment)
 
-        # If no valid pairs were found, print that the read is binned
-        # if not paired_sequences:
-        #     log_message(f"Read={read_name} - Binned (No valid primer pairs)", logging.WARNING)
-        
+      
         return paired_sequences
     
     def process_record(self, records: List[SeqRecord]) -> List[Tuple[SeqRecord, str]]:
@@ -574,11 +342,13 @@ class FastqSplitter:
             
             for i, match in enumerate(matches, 1):
                 
-                correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 5000
+                correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 50000
                 umi_seq = True
-                polyA = regex.findall("(AAAAAAAA){e<=0}", str(match['trimmed_seq']))
+                polyT = regex.findall("(TTTTTTTTTT){e<=0}", str(match['trimmed_seq'])[:150])
+                #polyT = False
+                polyA = regex.findall("(AAAAAAAAAA){e<=0}", str(match['trimmed_seq'])[-200:])
                 valid = match['valid']
-                classification = "full_length" if umi_seq and polyA and valid and correct_length else "lowqual"
+                classification = "full_length" if umi_seq and polyA and not polyT and valid and correct_length else "lowqual"
     
                 try:
                     ## modify the quality score extraction to allow reversing for flipped reads
@@ -602,11 +372,6 @@ class FastqSplitter:
                     log_message(f"Segment={record.id}_segment_{i} - Skipped segment, could not find quality scores. Slice from {match['forward'][0]} to {match['reverse'][1]}, Length length={len(match['trimmed_seq'])}bp", logging.WARNING)
                     continue
     
-        # if not results_records:
-        #     print("NO PRIMERS")
-        #     # Ensure the 'binned' read is always included if no matches
-        #     results_records.extend([(record, 'binned') for record in records])
-    
         return results_records
 
     def worker(self, args: str):
@@ -624,7 +389,7 @@ class FastqSplitter:
         return result
         
 
-    def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int, verbose: bool):
+    def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int):
         """
         Split FastQ reads based on primer pairs and indexes.
         
@@ -668,7 +433,6 @@ class FastqSplitter:
             stats['total_reads'] = total_records
 
             # Split records into chunks
-            #chunk_size = len(records) // num_workers
             chunks = [records[i:i + chunk_size] for i in range(0, len(records), chunk_size)]
             num_workers = min(num_workers, len(chunks))
             
@@ -692,13 +456,8 @@ class FastqSplitter:
                         # Update the progress bar based on the number of reads in the chunk
                         pbar.update(len(records_chunk))  # Update progress by the size of the chunk
 
-                    # for result in pool.imap(self.worker, args):
-                    #     # Flatten the results from the worker
-                    #     results.extend(result)
-                    #     pbar.update(len(result))  # Update progress bar after processing each chunk
-
+       
                     all_results = results
-                    #stats['total_segments'] = len(all_results)
                     
                     # Debug print: After all chunks are processed
                     log_message(f"Final sorting {stats['total_segments']} segments by valid primers and polyA filters.")
@@ -719,7 +478,7 @@ class FastqSplitter:
                             stats['binned_reads_0'] += 1
                     # Debug print: After all chunks are processed
                     log_message(f"Sorting segments complete. Writing outputs.")
-                    #print(f"\nAll {len(chunks)} chunks processed. Writing output files.")
+                 
 
         stats['processed_reads'] = stats['total_reads'] - (stats['binned_reads_0'] + stats['binned_reads_1']) 
         stats['total_segments'] = stats['full_length_segments'] +  stats['lowqual_segments']
@@ -784,8 +543,6 @@ def main():
     parser.add_argument("-rp", "--reverse-primer",
                        default="GTACTCTGCGTTGATACCACTGCTT",
                        help="Reverse primer sequence")
-    parser.add_argument("-sw", "--smith-waterman", type=int, choices=[1, 2, 3, 4], default=4,
-                        help="Select Smith-Waterman search version (1, 2, 3, or 4). Default is 4.")
     parser.add_argument("-e","--error", type=float, default=0.3, 
                        help="Number of errors allowed, default is 0.3")
     parser.add_argument("--chunk-size", type=int, default=1000,  
@@ -817,7 +574,7 @@ def main():
     start_time = time.time()  
     log_message(f"Starting read processing with {args.num_workers} threads and chunk size {args.chunk_size}")
     log_message(f"Scanning for FP {args.forward_primer} and RP {args.reverse_primer} in {args.input_file} with error tolerance {args.error}.")
-    splitter = FastqSplitter(args.forward_primer, args.reverse_primer, args.error, args.smith_waterman)
+    splitter = FastqSplitter(args.forward_primer, args.reverse_primer, args.error)
     splitter.parallel_split_reads(
         args.input_file,
         args.processed_output,
@@ -825,8 +582,7 @@ def main():
         args.bin_output,
         args.stats_output,
         args.num_workers,
-        args.chunk_size,
-        args.verbose
+        args.chunk_size       
     )
     
     # Calculate and print the total time taken
