@@ -108,7 +108,7 @@ def separate_by_index(infile, outfile):
                    --bin-output %(name)s.binned.fastq.gz \
                    --stats-output %(name)s.stats.csv \
                    -res %(results_dir)s -i %(infile)s -fp %(FP)s --indexes %(barcodes)s'''
-    P.run(statement, job_options='-t 03:00:00', job_memory="20G", job_threads=4, without_cluster = False)
+    P.run(statement, job_memory=PARAMS.get('splitter_mem'), job_threads=4, without_cluster = False)
 
 @follows(separate_by_index)
 @follows(mkdir("merged_results.dir"))

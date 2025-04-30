@@ -25,5 +25,8 @@ indexes:
 error: 4
 split: 4000000
 
-job_options: -t 18:00:00
+## usually 4hrs is enough - if pipeline fails try 8 or 12hrs
+job_options: -t 04:00:00
 
+## usually 20G sufficient, occassionally needs 40G.
+splitter_mem: 20G
