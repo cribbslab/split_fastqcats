@@ -344,9 +344,9 @@ class FastqSplitter:
                 
                 correct_length = len(match['trimmed_seq']) >= 50 and len(match['trimmed_seq']) <= 50000
                 umi_seq = True
-                polyT = regex.findall("(TTTTTTTTTT){e<=0}", str(match['trimmed_seq'])[:150])
+                polyT = regex.findall("(TTTTTTTTTTTT){e<=0}", str(match['trimmed_seq'])[:100])
                 #polyT = False
-                polyA = regex.findall("(AAAAAAAAAA){e<=0}", str(match['trimmed_seq'])[-200:])
+                polyA = regex.findall("(AAAAAAAAAAAA){e<=0}", str(match['trimmed_seq'])[-100:])
                 valid = match['valid']
                 classification = "full_length" if umi_seq and polyA and not polyT and valid and correct_length else "lowqual"
     
