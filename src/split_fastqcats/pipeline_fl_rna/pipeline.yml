@@ -1,4 +1,4 @@
-# Config file for pipeline_split_by_index.py
+# Config file for pipeline_fl_rna.py
 
 ## general options
 
@@ -8,23 +8,13 @@ copyright: cribbslab (2021)
 FP: AAGCAGTGGTATCAACGCAGAGTGAAT
 RP: GTACTCTGCGTTGATACCACTGCTT
 
-indexes:
-  - AAATTTGGGCCC
-  - TTTCCCAAAGGG
-  - GGGAAACCCTTT
-  - CCCGGGTTTAAA
-  - AAACCCGGGAAA
-  - TTTGGGAAATTT
-  - GGGTTTCCCGGG
-  - CCCAAATTTCCC
-  - AAAGGGAAAGGG
-  - TTTAAATTTAAA
-  - GGGCCCGGGCCC
-  - CCCTTTCCCTTT
-
 ## edit distance for primer matching
 error: 0.3
 split: 4000000
 
-job_options: -t 18:00:00
 
+## usually 4hrs is enough - if pipeline fails try 8 or 12hrs
+job_options: -t 04:00:00
+
+## usually 20G sufficient, occassionally needs 40G.
+splitter_mem: 20G
