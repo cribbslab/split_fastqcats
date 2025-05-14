@@ -402,9 +402,9 @@ class FastqSplitter:
                         lowqual_reasons['low_length'] += 1
                     elif len(match['trimmed_seq']) > 50000 and valid:
                         lowqual_reasons['high_length'] += 1
-                    if not polyA and valid:
+                    if not polyA and valid and correct_length:
                         lowqual_reasons['polyA_false'] += 1
-                    if polyT and valid:
+                    if polyT and valid and correct_length and polyA:
                         lowqual_reasons['polyT_true'] += 1
                     if not valid:
                         lowqual_reasons['not_valid'] += 1
