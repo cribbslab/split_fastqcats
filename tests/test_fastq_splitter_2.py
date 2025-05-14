@@ -51,7 +51,7 @@ class TestFastqSplitter(unittest.TestCase):
 
     def test_find_best_primer_pairs(self):
         """Test primer pair finding"""
-        pairs = self.splitter.find_best_primer_pairs(self.test_seq, self.test_id)
+        pairs, primer_hits = self.splitter.find_best_primer_pairs(self.test_seq, self.test_id)
         self.assertTrue(len(pairs) > 0)
         self.assertTrue('trimmed_seq' in pairs[0])
 
