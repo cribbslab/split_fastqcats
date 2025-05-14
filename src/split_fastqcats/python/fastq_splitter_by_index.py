@@ -14,6 +14,8 @@ from typing import Dict, List, Tuple, Union
 import time
 from multiprocessing import Pool
 from tqdm import tqdm
+from collections import Counter
+
 
 class FastqSplitter:
     def __init__(self, forward_primer: str, index_dict: Dict[str, str], mismatches: int):
@@ -64,6 +66,49 @@ class FastqSplitter:
             min_score_threshold = (pattern_length - errors) * self.match_score
             max_mismatches = errors
         
+        scoring_matrix = parasail.matrix_create("ACGT", self.match_score, self.mismatch_score) ##simple matrix to test if concern about below matrix with VRN
+        # Create matrix with A, C, G, T, V, R, Y, N
+        matrix = parasail.matrix_create("ACGTVRYN", 2, -1)
+        
+        # Manually update values: matrix[row, col] = score
+        # V = A, C, G (match), not T (mismatch)
+        matrix[4, 0] = 2  # V, A
+        matrix[0, 4] = 2
+        matrix[4, 1] = 2  # V, C
+        matrix[1, 4] = 2
+        matrix[4, 2] = 2  # V, G
+        matrix[2, 4] = 2
+        matrix[4, 3] = -1 # V, T
+        matrix[3, 4] = -1
+        
+        # R = A, G (match), not C, T
+        matrix[5, 0] = 2  # R, A
+        matrix[0, 5] = 2
+        matrix[5, 2] = 2  # R, G
+        matrix[2, 5] = 2
+        matrix[5, 1] = -1 # R, C
+        matrix[1, 5] = -1
+        matrix[5, 3] = -1 # R, T
+        matrix[3, 5] = -1
+        
+        # Y = C, T (match), not A, G
+        matrix[6, 1] = 2  # Y, C
+        matrix[1, 6] = 2
+        matrix[6, 3] = 2  # Y, T
+        matrix[3, 6] = 2
+        matrix[6, 0] = -1 # Y, A
+        matrix[0, 6] = -1
+        matrix[6, 2] = -1 # Y, G
+        matrix[2, 6] = -1
+        
+        # N = any base (match)
+        for i in range(8):
+            matrix[7, i] = 2  # N, base
+            matrix[i, 7] = 2
+
+        scoring_matrix = matrix
+        
+        
         window_size = 100
         step_size = 50
         
@@ -78,8 +123,8 @@ class FastqSplitter:
                     window, pattern,
                     self.open_gap_score, # Gap opening penalty
                     self.extend_gap_score, # Gap extension penalty
-                    parasail.matrix_create("ACGT", self.match_score, self.mismatch_score)
-                    #parasail.dnafull  # DNA-specific scoring matrix
+                    scoring_matrix
+                    #parasail.dnafull  # DNA-specific inbuilt scoring matrix, not used, for testing only
                 )
                 
                 # **Check if alignment score is valid**
@@ -172,12 +217,14 @@ class FastqSplitter:
     def process_record(self, records: List[SeqRecord]) -> List[Tuple[SeqRecord, str]]:
         
         results_records = []
+        primer_count = Counter()
         
         for record in records:
             seq = str(record.seq)
             read_name = record.id  # Get read name
             log_message(f"Processing read {read_name}", logging.DEBUG)
             matches = self.smith_waterman_search(seq, read_name, self.max_mismatches)  # Pass read name
+            primer_count[len(matches)] += 1
     
             if not matches:
                  # If no matches are found, classify as binned, but always return the record.
@@ -219,21 +266,21 @@ class FastqSplitter:
                     log_message(f"Read={record.id} -> {len(matches)} barcode/primer hits found, Segment={new_id} -> Assigned to {index_label}, Start={start_position}, Mismatches={current_match['mismatches']}, Score={current_match['score']}, Score threshold: {current_match['min_score_threshold']}, Length={len(subsequence)}bp", logging.DEBUG)
            
     
-        return results_records
+        return results_records, primer_count
 
     def worker(self, args: str):
         """
         Worker function to process a chunk of FASTQ records.
         """
         records_chunk = args
-        result = self.process_record(records_chunk)
+        result, primer_count = self.process_record(records_chunk)
         # Count 'binned' directly, and calculate 'classified' by subtracting from total length
         binned_count = sum(1 for _, classification in result if classification == 'binned')
         classified_count = len(result) - binned_count  # Total minus binned
 
         log_message(f"Chunk processed: {len(records_chunk)} reads -> {classified_count} processed segments and {binned_count} binned reads")
     
-        return result
+        return result, primer_count
     
     def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int):
         stats = {
@@ -279,11 +326,13 @@ class FastqSplitter:
             with Pool(num_workers) as pool:
                 with tqdm(total=total_records, desc="Processing Reads", unit=" reads", dynamic_ncols=True,  unit_scale=True) as pbar:
                     results = []
+                    total_primer_hits = Counter()
                     
                     for records_chunk in chunks:  # Iterate over the chunks of records
                         # Pass the chunk to the worker and get the result
-                        result = self.worker(records_chunk)
+                        result, chunk_primer_count = self.worker(records_chunk)
                         results.extend(result)  # Flatten the results
+                        total_primer_hits.update(chunk_primer_count)
                         
                         # Update the progress bar based on the number of reads in the chunk
                         pbar.update(len(records_chunk))  # Update progress by the size of the chunk
@@ -340,9 +389,15 @@ class FastqSplitter:
             for metric, value in stats.items():
                 writer.writerow([metric, value])
             # Write the count of segments for each index
+            writer.writerow([])
             writer.writerow(["Index", "SegmentCount"])
             for index, count in index_counts.items():
                 writer.writerow([index, count])
+            # Write the count of reads by number segments/index 
+            writer.writerow([])
+            writer.writerow(["Index Hits", "Read Count"])
+            for hit_count in sorted(total_primer_hits):
+                writer.writerow([hit_count, total_primer_hits[hit_count]])
     
         
       

@@ -25,6 +25,7 @@ from Bio.Seq import Seq
 import csv
 from typing import Dict, List, Tuple, Optional
 from multiprocessing import Pool, cpu_count
+from collections import Counter
 
 class FastqSplitter:
     def __init__(self, forward_primer: str, reverse_primer: str, error: float):
@@ -52,7 +53,7 @@ class FastqSplitter:
     
     
     #Parasail aligner tool with 100bp window and 50bp overlapping step - very fast -- 1000 reads/sec
-    def smith_waterman_search(self, sequence: str, read_name: str, primer: str, error: float = 0.35) -> List[dict]:
+    def smith_waterman_search(self, sequence: str, read_name: str, primer: str, error: float = 0.3) -> List[dict]:
         """
         Perform Smith-Waterman local alignment to find primer matches.
         
@@ -84,8 +85,48 @@ class FastqSplitter:
     
         # Also search for reverse complement
         rev_comp_primer = str(Seq(primer).reverse_complement())
-        scoring_matrix = parasail.matrix_create("ACGT", self.match_score, self.mismatch_score)
+        scoring_matrix = parasail.matrix_create("ACGT", self.match_score, self.mismatch_score) ##simple matrix to test if concern about below matrix with VRN
         
+        # Create matrix with A, C, G, T, V, R, Y, N
+        matrix = parasail.matrix_create("ACGTVRYN", 2, -1)
+        
+        # Manually update values: matrix[row, col] = score
+        # V = A, C, G (match), not T (mismatch)
+        matrix[4, 0] = 2  # V, A
+        matrix[0, 4] = 2
+        matrix[4, 1] = 2  # V, C
+        matrix[1, 4] = 2
+        matrix[4, 2] = 2  # V, G
+        matrix[2, 4] = 2
+        matrix[4, 3] = -1 # V, T
+        matrix[3, 4] = -1
+        
+        # R = A, G (match), not C, T
+        matrix[5, 0] = 2  # R, A
+        matrix[0, 5] = 2
+        matrix[5, 2] = 2  # R, G
+        matrix[2, 5] = 2
+        matrix[5, 1] = -1 # R, C
+        matrix[1, 5] = -1
+        matrix[5, 3] = -1 # R, T
+        matrix[3, 5] = -1
+        
+        # Y = C, T (match), not A, G
+        matrix[6, 1] = 2  # Y, C
+        matrix[1, 6] = 2
+        matrix[6, 3] = 2  # Y, T
+        matrix[3, 6] = 2
+        matrix[6, 0] = -1 # Y, A
+        matrix[0, 6] = -1
+        matrix[6, 2] = -1 # Y, G
+        matrix[2, 6] = -1
+        
+        # N = any base (match)
+        for i in range(8):
+            matrix[7, i] = 2  # N, base
+            matrix[i, 7] = 2
+
+        scoring_matrix = matrix
         
         # set winow size for sliding search
         window_size = 100
@@ -104,7 +145,7 @@ class FastqSplitter:
                     self.open_gap_score, # Gap opening penalty
                     self.extend_gap_score, # Gap extension penalty
                     scoring_matrix
-                    #parasail.dnafull  # DNA-specific scoring matrix
+                    #parasail.dnafull  # # DNA-specific inbuilt scoring matrix, not used, for testing only
                 )
                 
                 # **Check if alignment score is valid**
@@ -205,6 +246,7 @@ class FastqSplitter:
                     
         filtered_matches.sort(key=lambda x: x[0]['start'])  # Sort by start position
         all_matches = filtered_matches
+        primer_hits = len(all_matches)
         log_message(f"Read={read_name} - found {len(all_matches)} primer hits", logging.DEBUG)     
                 
         for i, (match1, type1) in enumerate(all_matches[:-1]):  # Look at all pairs of adjacent matches
@@ -312,18 +354,20 @@ class FastqSplitter:
                 paired_sequences.append(last_segment)
 
       
-        return paired_sequences
+        return paired_sequences, primer_hits
     
     def process_record(self, records: List[SeqRecord]) -> List[Tuple[SeqRecord, str]]:
         results_records = []
+        segment_hits = Counter()
+        primer_count = Counter()
     
         for record in records:
             seq = str(record.seq)
             read_name = record.id  # Get read name
             log_message(f"Processing read {read_name}", logging.DEBUG)
-            matches = self.find_best_primer_pairs(seq, read_name)  # Pass read name
-            
-            
+            matches, primer_hits = self.find_best_primer_pairs(seq, read_name)  # Pass read name
+            segment_hits[len(matches)] += 1
+            primer_count[primer_hits] += 1
             #deal with single primer hits - comment this section out if single primer hit segments should be put in lowqual instead
             if len(matches) == 1 and matches[0]['reverse_seq'] == "NA":
                #log_message(f"Read={read_name} - Check - {matches[0]['forward_seq']} Length {len(matches[0]['trimmed_seq'])} Forward {matches[0]['forward']} Reverse {matches[0]['reverse']} Reversed {matches[0]['reversed']}", logging.DEBUG)
@@ -372,11 +416,11 @@ class FastqSplitter:
                     log_message(f"Segment={record.id}_segment_{i} - Skipped segment, could not find quality scores. Slice from {match['forward'][0]} to {match['reverse'][1]}, Length length={len(match['trimmed_seq'])}bp", logging.WARNING)
                     continue
     
-        return results_records
+        return results_records, segment_hits, primer_count
 
     def worker(self, args: str):
         records_chunk = args
-        result = self.process_record(records_chunk)
+        result, segment_hits, primer_count = self.process_record(records_chunk)
         
         
         # Count 'binned' directly, and calculate 'classified' by subtracting from total length
@@ -386,7 +430,7 @@ class FastqSplitter:
     
         log_message(f"Chunk processed: {len(records_chunk)} reads -> {classified_count} processed segments and {binned_count} binned reads")
     
-        return result
+        return result, segment_hits, primer_count
         
 
     def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int):
@@ -446,13 +490,16 @@ class FastqSplitter:
             with Pool(num_workers) as pool:
                 with tqdm(total=total_records, desc="Processing Reads", unit=" reads") as pbar:
                     results = []
-                    
+                    total_segment_hits = Counter()
+                    total_primer_hits = Counter()
+
                     
                     for records_chunk in chunks:  # Iterate over the chunks of records
                         # Pass the chunk to the worker and get the result
-                        result = self.worker(records_chunk)
+                        result, chunk_segment_hits, chunk_primer_count = self.worker(records_chunk)
                         results.extend(result)  # Flatten the results
-                        
+                        total_segment_hits.update(chunk_segment_hits)
+                        total_primer_hits.update(chunk_primer_count)
                         # Update the progress bar based on the number of reads in the chunk
                         pbar.update(len(records_chunk))  # Update progress by the size of the chunk
 
@@ -499,6 +546,14 @@ class FastqSplitter:
             writer.writerow(["Metric", "Value"])
             for metric, value in stats.items():
                 writer.writerow([metric, value])
+            writer.writerow([])
+            writer.writerow(["Segment Hits", "Read Count"])
+            for hit_count in sorted(total_segment_hits):
+                writer.writerow([hit_count, total_segment_hits[hit_count]])
+            writer.writerow([])
+            writer.writerow(["Primer Hits", "Read Count"])
+            for hit_count in sorted(total_primer_hits):
+                writer.writerow([hit_count, total_primer_hits[hit_count]])
 
         
 
