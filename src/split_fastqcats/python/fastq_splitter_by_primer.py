@@ -274,10 +274,10 @@ class FastqSplitter:
              # Check if match1 and match2 form a valid primer pair
             valid_pair = False
             reversed = False
-            if type1 == 'forward' and type2 == 'reverse' and match1['is_reverse'] == False and passes_length_quality:
+            if type1 == 'forward' and type2 == 'reverse' and match1['is_reverse'] == False:
                 valid_pair = True
                 trimmed_seq = sequence[pos1_start:pos2_end]
-            elif type1 == 'reverse' and type2 == 'forward' and match1['is_reverse'] == True and passes_length_quality:
+            elif type1 == 'reverse' and type2 == 'forward' and match1['is_reverse'] == True:
                 valid_pair = True
                 reversed = True
                 match1, match2 = match2, match1
@@ -360,6 +360,8 @@ class FastqSplitter:
         results_records = []
         segment_hits = Counter()
         primer_count = Counter()
+        lowqual_reasons = Counter()
+
     
         for record in records:
             seq = str(record.seq)
@@ -390,9 +392,23 @@ class FastqSplitter:
                 umi_seq = True
                 polyT = regex.findall("(TTTTTTTTTTTT){e<=0}", str(match['trimmed_seq'])[:100])
                 #polyT = False
-                polyA = regex.findall("(AAAAAAAAAAAA){e<=0}", str(match['trimmed_seq'])[-100:])
+                polyA = regex.findall("(AAAAAAAAAAAA){e<=0}", str(match['trimmed_seq'])[-150:])
                 valid = match['valid']
                 classification = "full_length" if umi_seq and polyA and not polyT and valid and correct_length else "lowqual"
+                
+                
+                if classification == "lowqual":
+                    if len(match['trimmed_seq']) < 50 and valid:
+                        lowqual_reasons['low_length'] += 1
+                    elif len(match['trimmed_seq']) > 50000 and valid:
+                        lowqual_reasons['high_length'] += 1
+                    if not polyA and valid and correct_length:
+                        lowqual_reasons['polyA_false'] += 1
+                    if polyT and valid and correct_length and polyA:
+                        lowqual_reasons['polyT_true'] += 1
+                    if not valid:
+                        lowqual_reasons['not_valid'] += 1
+
     
                 try:
                     ## modify the quality score extraction to allow reversing for flipped reads
@@ -416,11 +432,11 @@ class FastqSplitter:
                     log_message(f"Segment={record.id}_segment_{i} - Skipped segment, could not find quality scores. Slice from {match['forward'][0]} to {match['reverse'][1]}, Length length={len(match['trimmed_seq'])}bp", logging.WARNING)
                     continue
     
-        return results_records, segment_hits, primer_count
+        return results_records, segment_hits, primer_count, lowqual_reasons
 
     def worker(self, args: str):
         records_chunk = args
-        result, segment_hits, primer_count = self.process_record(records_chunk)
+        result, segment_hits, primer_count, lowqual_reasons = self.process_record(records_chunk)
         
         
         # Count 'binned' directly, and calculate 'classified' by subtracting from total length
@@ -430,7 +446,7 @@ class FastqSplitter:
     
         log_message(f"Chunk processed: {len(records_chunk)} reads -> {classified_count} processed segments and {binned_count} binned reads")
     
-        return result, segment_hits, primer_count
+        return result, segment_hits, primer_count, lowqual_reasons
         
 
     def parallel_split_reads(self, input_file: str, processed_output: str, lowqual_output: str, bin_output: str, stats_output: str, num_workers: int, chunk_size: int):
@@ -444,13 +460,7 @@ class FastqSplitter:
             bin_output: Output path for binned reads
             stats_output: Output path for statistics
         """
-        stats = {
-            'total_sequences': 0,
-            'total_segments': 0,
-            'processed': 0,
-            'lowqual': 0,
-            'binned': 0
-        }
+        
         stats = {
             'total_reads': 0,
             'processed_reads': 0,
@@ -492,14 +502,17 @@ class FastqSplitter:
                     results = []
                     total_segment_hits = Counter()
                     total_primer_hits = Counter()
+                    total_lowqual_reasons = Counter()
+
 
                     
                     for records_chunk in chunks:  # Iterate over the chunks of records
                         # Pass the chunk to the worker and get the result
-                        result, chunk_segment_hits, chunk_primer_count = self.worker(records_chunk)
+                        result, chunk_segment_hits, chunk_primer_count, chunk_lowqual_reasons = self.worker(records_chunk)
                         results.extend(result)  # Flatten the results
                         total_segment_hits.update(chunk_segment_hits)
                         total_primer_hits.update(chunk_primer_count)
+                        total_lowqual_reasons.update(chunk_lowqual_reasons)
                         # Update the progress bar based on the number of reads in the chunk
                         pbar.update(len(records_chunk))  # Update progress by the size of the chunk
 
@@ -554,6 +567,11 @@ class FastqSplitter:
             writer.writerow(["Primer Hits", "Read Count"])
             for hit_count in sorted(total_primer_hits):
                 writer.writerow([hit_count, total_primer_hits[hit_count]])
+            writer.writerow([])
+            writer.writerow(["Lowqual Reasons", "Count"])
+            for reason, count in total_lowqual_reasons.items():
+                writer.writerow([reason, count])
+
 
         
 
