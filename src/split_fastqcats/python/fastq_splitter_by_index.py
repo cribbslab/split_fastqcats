@@ -120,7 +120,7 @@ class FastqSplitter:
                 
                 # Perform Parasail alignment
                 alignment = parasail.sw_trace_striped_16(
-                    window, pattern,
+                    pattern, window,
                     self.open_gap_score, # Gap opening penalty
                     self.extend_gap_score, # Gap extension penalty
                     scoring_matrix
@@ -129,42 +129,44 @@ class FastqSplitter:
                 
                 # **Check if alignment score is valid**
                 if alignment is None or alignment.score is None:
-                    print(alignment)
+                    #print(alignment)
                     continue  # Skip this pattern if alignment failed
     
                 
                 # Ensure start position is valid
-                start_position = max(0, alignment.end_query - pattern_length + 1 + start)
-                end_position = min(len(sequence), start_position + pattern_length)
+                aligned_ref = alignment.traceback.ref
+                aligned_ref_length = len(aligned_ref.replace("-", ""))
+                start_position = max(0, alignment.end_ref - aligned_ref_length + 1 + start)
+                end_position = min(len(sequence), start + alignment.end_ref + 1)
                 
                 
                 # Create a unique identifier for each match
-                match_key = (pattern, start_position)
-          
+                #match_key = (pattern, start_position)
+                match_key = (pattern, start_position, end_position, aligned_ref_length, alignment.score)
                 # Avoid adding duplicates
                 if match_key in seen_matches:
                     continue  # Skip duplicates
           
                 # Otherwise, add to results
-                seen_matches.add(match_key)
+                #seen_matches.add(match_key)
     
                 # Allow a maximum of `max_mismatches` mismatches (including gaps)
                 if alignment.score >= min_score_threshold:
                     
                     # Extract actual alignment details
-                    aligned_query = alignment.traceback.query
-                    aligned_pattern = alignment.traceback.ref
+                    aligned_ref = alignment.traceback.ref
+                    aligned_pattern = alignment.traceback.query
                     
                     # Count mismatches and gaps
                     #counts mismatches and gaps together
-                    mismatches = sum(1 for a, b in zip(aligned_query, aligned_pattern) if a != b)
+                    mismatches = sum(1 for a, b in zip(aligned_ref, aligned_pattern) if a != b)
                     
                     #counts mismatch and gaps separately
-                    #mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
-                    gaps = aligned_query.count('-') + aligned_pattern.count('-')
+                    #mismatches = sum(1 for q, p in zip(aligned_ref, aligned_pattern) if q != p and q != '-' and p != '-')
+                    gaps = aligned_ref.count('-') + aligned_pattern.count('-')
                     
                     if mismatches <= max_mismatches:
-                        #print(f"DEBUG: Record={record_id}, Pattern={pattern}, Start={start_position}, Mismatches={mismatches}, Score={alignment.score}")
+                        seen_matches.add(match_key)
                         log_message(f"Record={record_id}, Pattern={pattern}, Start={start_position+start}, Mismatches={mismatches}, Score={alignment.score}", logging.DEBUG)
     
                         best_matches.append({

@@ -1,5 +1,5 @@
-##Edits to Adam and Beth's main 'fastq_splitter_editted.py' script 
-# - Reverse complement polyT sequences 
+##Edits to Adam and Beth's main 'fastq_splitter_editted.py' script
+# - Reverse complement polyT sequences
 # - Remove UMI based QC processing - UMI can be dealt with by the tallytrin count pipeline
 # - Filters reads without polyA
 # . Error tolerance - -e parameter set number of mismatches/error tolerance - 0.3-0.4 seems to be a reasonable sensitivty for current test reads
@@ -141,7 +141,7 @@ class FastqSplitter:
                 
                 # Perform Parasail alignment
                 alignment = parasail.sw_trace_striped_16(
-                    window, search_primer,
+                    search_primer, window,
                     self.open_gap_score, # Gap opening penalty
                     self.extend_gap_score, # Gap extension penalty
                     scoring_matrix
@@ -153,35 +153,40 @@ class FastqSplitter:
                     continue  # Skip this pattern if alignment failed
                 
                 # Ensure start position is valid
-                start_position = max(0, alignment.end_query - pattern_length + 1 + start)
-                end_position = min(len(sequence), start_position + pattern_length)
+                aligned_ref = alignment.traceback.ref
+                aligned_ref_length = len(aligned_ref.replace("-", ""))
+                start_position = max(0, alignment.end_ref - aligned_ref_length + 1 + start)
+                end_position = min(len(sequence), start + alignment.end_ref + 1)
             
                 # Create a unique identifier for each match
-                match_key = (search_primer, start_position)
+                match_key = (search_primer, start_position, end_position, aligned_ref_length, alignment.score)
     
                 # Avoid adding duplicates
                 if match_key in seen_matches:
                     continue  # Skip duplicates
         
-                # Otherwise, add to results
-                seen_matches.add(match_key)
+                # Otherwise, add to results - moving this to add only hits that pass threshold
+                #seen_matches.add(match_key)
     
                 if alignment.score >= min_score_threshold:
                     # Extract actual alignment details
-                    aligned_query = alignment.traceback.query
-                    aligned_pattern = alignment.traceback.ref
+                    aligned_ref = alignment.traceback.ref
+                    aligned_pattern = alignment.traceback.query
         
                     # Count mismatches and gaps
                     
                     #counts mismatches and gaps together
-                    mismatches = sum(1 for a, b in zip(aligned_query, aligned_pattern) if a != b)
+                    mismatches = sum(1 for a, b in zip(aligned_ref, aligned_pattern) if a != b)
                     
-                    #counts mismatch and gaps separately
-                    #mismatches = sum(1 for q, p in zip(aligned_query, aligned_pattern) if q != p and q != '-' and p != '-')
-                    gaps = aligned_query.count('-') + aligned_pattern.count('-')
+                    #counts mismatch and gaps separately - can be uncommented if wanting to report separately
+                    #mismatches = sum(1 for q, p in zip(aligned_ref, aligned_pattern) if q != p and q != '-' and p != '-')
+                    gaps = aligned_ref.count('-') + aligned_pattern.count('-')
                     
-        
+                    # note - max_mismatches here is mismatches + gaps together.
                     if mismatches <= max_mismatches:
+                        # Add match positions to seen matches to avoid duplication in future searches
+                        seen_matches.add(match_key)
+                        # Take match params for next step
                         matches.append({
                             'start': start_position,
                             'end': end_position,
@@ -460,7 +465,13 @@ class FastqSplitter:
             bin_output: Output path for binned reads
             stats_output: Output path for statistics
         """
-        
+        stats = {
+            'total_sequences': 0,
+            'total_segments': 0,
+            'processed': 0,
+            'lowqual': 0,
+            'binned': 0
+        }
         stats = {
             'total_reads': 0,
             'processed_reads': 0,
